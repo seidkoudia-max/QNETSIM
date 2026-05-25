@@ -1,0 +1,3 @@
+-r requirements.txt
+ryu>=4.34
+webob>=1.8

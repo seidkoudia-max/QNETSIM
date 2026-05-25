@@ -5,5 +5,3 @@ pandas>=2.0
 networkx>=3.0
 skyfield>=1.49
 sgp4>=2.23
-ryu>=4.34
-webob>=1.8

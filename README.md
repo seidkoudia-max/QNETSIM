@@ -17,15 +17,18 @@ separate checkout of the larger QCompute/QNET tree.
 - `qnetsim/framework/`
   - local DES core and protocol compatibility layer used by the simulator
 - `requirements.txt`
-  - Python dependencies for the standalone bundle
+  - Python dependencies for DES-only and DES + SDN Local
+- `requirements-ryu.txt`
+  - Optional add-on dependencies for DES + SDN Ryu
 - `launch_single_repeater.sh`
 - `launch_stbd.sh`
 - `launch_ground.sh`
 
 ## Recommended Python version
 
-Use Python `3.9` if possible, since the current simulator environment has been
-validated most heavily there.
+Use Python `3.9` if possible. The bundle has been validated most heavily there,
+and the optional `ryu` package currently does not build reliably on Python
+`3.12`.
 
 ## Quick start
 
@@ -35,6 +38,20 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+```
+
+This is enough for:
+
+- `DES only`
+- `DES + SDN Local`
+
+### Optional Ryu-backed controller modes
+
+If you want `DES + SDN Ryu`, use Python `3.9` or `3.10` for the virtual
+environment, then install:
+
+```bash
+python -m pip install -r requirements-ryu.txt
 ```
 
 ### Launch the Single Repeater GUI
@@ -64,16 +81,14 @@ python -m streamlit run paper_ground_studio.py --server.port 8503
 
 Open [http://localhost:8503](http://localhost:8503)
 
-## Optional Ryu-backed controller modes
-
 The bundle includes the local Ryu controller apps used by:
 
-- `DES + Ryu` in the Single Repeater GUI
-- `SDN + Ryu` in the STBD GUI
-- `SDN + Ryu` in the Ground GUI
+- `DES + SDN Ryu` in the Single Repeater GUI
+- `DES + SDN Ryu` in the STBD GUI
+- `DES + SDN Ryu` in the Ground GUI
 
 Those modes use the same Python environment after `ryu` is installed from
-`requirements.txt`.
+`requirements-ryu.txt`.
 
 ## Outputs
 
