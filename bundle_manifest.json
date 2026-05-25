@@ -1,0 +1,55 @@
+{
+  "bundle_root": "/Users/seid.koudia/QCompute/qnetsim/standalone_bundle",
+  "app_root": "/Users/seid.koudia/QCompute/qnetsim/standalone_bundle/qnetsim",
+  "top_level_files": [
+    "paper_figure_studio.py",
+    "paper_figure_studio_backend.py",
+    "paper_stbd_studio.py",
+    "stbd_figure_studio_backend.py",
+    "paper_ground_studio.py",
+    "paper_ground_studio_backend.py",
+    "des_no_sdn_paper_figures.py",
+    "des_sdn_paper_figures.py",
+    "des_physics_no_sdn_simulator.py",
+    "des_stbd_physics_simulator.py",
+    "des_ground_repeater_simulator.py",
+    "starlink_tle.txt",
+    "starlink_multi.json",
+    "starlink_multi.tle"
+  ],
+  "directories": [
+    "algorithms",
+    "assets",
+    "channels",
+    "mobility",
+    "quantum",
+    "stbd_constellation"
+  ],
+  "sdn_controller_files": [
+    "__init__.py",
+    "link_state_db.py",
+    "path_engine.py",
+    "repeater_controller_core.py",
+    "ryu_repeater_controller_app.py",
+    "stbd_segment_controller_core.py",
+    "ryu_stbd_constellation_app.py",
+    "ground_repeater_controller_core.py",
+    "ryu_ground_repeater_app.py"
+  ],
+  "sim_files": [
+    "__init__.py",
+    "seeding.py"
+  ],
+  "vendored_qnet_core_files": [
+    "__init__.py",
+    "des.py",
+    "log.py",
+    "utils.py"
+  ],
+  "vendored_qnet_protocol_files": [
+    "__init__.py",
+    "protocol.py",
+    "resource.py",
+    "routing.py"
+  ]
+}

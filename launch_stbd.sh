@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/qnetsim"
+python -m streamlit run paper_stbd_studio.py --server.port 8502
