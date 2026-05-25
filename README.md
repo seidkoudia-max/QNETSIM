@@ -26,32 +26,39 @@ separate checkout of the larger QCompute/QNET tree.
 
 ## Recommended Python version
 
-Use Python `3.9` if possible. The bundle has been validated most heavily there,
-and the optional `ryu` package currently does not build reliably on Python
-`3.12`.
+Use Python `3.9`. This is the recommended baseline for the standalone bundle
+because it supports all three controller modes, including `DES + SDN Ryu`.
+
+The optional `ryu` package does not currently build reliably on Python `3.12`,
+so if you want the full simulator feature set, create the virtual environment
+with Python `3.9`.
 
 ## Quick start
 
 ```bash
 cd standalone_bundle
-python3 -m venv .venv
+/opt/homebrew/bin/python3.9 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-ryu.txt
 ```
 
-This is enough for:
+This is the recommended full setup and gives you:
 
 - `DES only`
 - `DES + SDN Local`
+- `DES + SDN Ryu`
 
-### Optional Ryu-backed controller modes
+If `python3.9` lives somewhere else on your machine, use that executable
+instead of `/opt/homebrew/bin/python3.9`.
 
-If you want `DES + SDN Ryu`, use Python `3.9` or `3.10` for the virtual
-environment, then install:
+### Minimal non-Ryu fallback
+
+If you only want `DES only` and `DES + SDN Local`, you can still use a newer
+Python such as `3.12` and install:
 
 ```bash
-python -m pip install -r requirements-ryu.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Launch the Single Repeater GUI
