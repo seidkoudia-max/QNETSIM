@@ -117,6 +117,8 @@ def _ryu_controller_context(root_dir: Path, out_dir: Path) -> Iterator[str]:
                 "-m",
                 "ryu.cmd.manager",
                 str(root_dir / "sdn_controller" / "ryu_repeater_controller_app.py"),
+                "--wsapi-host",
+                "127.0.0.1",
                 "--wsapi-port",
                 str(port),
             ],
@@ -125,7 +127,23 @@ def _ryu_controller_context(root_dir: Path, out_dir: Path) -> Iterator[str]:
             stderr=subprocess.STDOUT,
         )
         try:
-            _wait_for_local_port(port)
+            try:
+                _wait_for_local_port(port)
+            except Exception as exc:
+                exit_code = process.poll()
+                log_tail = ""
+                try:
+                    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if lines:
+                        log_tail = "\n".join(lines[-20:])
+                except OSError:
+                    pass
+                detail = f"Local Ryu controller failed to start on port {port}."
+                if exit_code is not None:
+                    detail += f" Exit code: {exit_code}."
+                if log_tail:
+                    detail += f"\nLast log lines:\n{log_tail}"
+                raise RuntimeError(detail) from exc
             yield f"http://127.0.0.1:{port}"
         finally:
             process.terminate()
