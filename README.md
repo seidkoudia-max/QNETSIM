@@ -7,15 +7,15 @@ This folder is a GitHub-ready standalone bundle of the active QNETSIM apps:
 - `QNETSIM Ground`
 
 It includes the repository physics, mobility, plotting, controller, and optimizer
-modules plus the minimal vendored QNET DES/protocol files needed to run without a
+modules plus a QNETSIM-native DES/framework layer so the bundle runs without a
 separate checkout of the larger QCompute/QNET tree.
 
 ## Folder layout
 
 - `qnetsim/`
   - Streamlit GUIs, simulators, physics, mobility, algorithms, controllers
-- `Extensions/QuantumNetwork/qcompute_qnet/`
-  - vendored minimal QNET DES/protocol modules used by the simulator
+- `qnetsim/framework/`
+  - local DES core and protocol compatibility layer used by the simulator
 - `requirements.txt`
   - Python dependencies for the standalone bundle
 - `launch_single_repeater.sh`
@@ -83,16 +83,16 @@ Generated files are written under:
 
 The apps create run-specific subfolders automatically.
 
-## Notes on the vendored QNET modules
+## Notes on the standalone framework layer
 
-The simulator still uses QNETSIM as the source of truth for the DES behavior.
-To avoid requiring a separate upstream checkout, this bundle vendors the minimal
-files currently needed from:
+The simulator uses a QNETSIM-native DES/framework layer that preserves the
+runtime interfaces required by the three published GUIs:
 
-- `Extensions/QuantumNetwork/qcompute_qnet/core`
-- `Extensions/QuantumNetwork/qcompute_qnet/protocols`
+- `qnetsim/framework/core`
+- `qnetsim/framework/protocols`
 
-The upstream copyright headers are preserved in those files.
+This lets the standalone repository run independently of external QNET/Baidu
+DES sources while keeping the current app behavior intact.
 
 ## Publish this bundle to GitHub
 

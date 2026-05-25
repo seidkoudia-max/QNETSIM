@@ -21,10 +21,8 @@ import matplotlib.pyplot as plt
 
 from algorithms.stbd import STBDResult, plan_stbd_route
 from channels.fso import fidelity_to_werner, werner_to_fidelity
+from framework.core.des import DESEnv, Entity, EventHandler
 from des_physics_no_sdn_simulator import (
-    DESEnv,
-    Entity,
-    EventHandler,
     PS_PER_S,
     build_bsm_model,
     build_fso_model,
@@ -634,7 +632,7 @@ class STBDPhysicsDES(Entity):
         self.cumulative_fidelity_sum = 0.0
 
     def init(self) -> None:
-        if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if self.controller_client is not None and self.controller_backend != "des_only":
             segments = [
                 {
                     "snapshot_index": int(segment.snapshot_index),
@@ -697,7 +695,7 @@ class STBDPhysicsDES(Entity):
         return float(self._absolute_now_ps()) / PS_PER_S
 
     def _controller_state(self) -> Dict[str, object] | None:
-        if self.controller_client is None or self.controller_backend != "sdn_ryu":
+        if self.controller_client is None or self.controller_backend == "des_only":
             return None
         now_ps = self._absolute_now_ps()
         if self._controller_cache_t_ps == now_ps and self._controller_cache is not None:
@@ -725,7 +723,7 @@ class STBDPhysicsDES(Entity):
         return bool(state.get("final_segment_active", False))
 
     def _is_label_active(self, label: str, t_s: float) -> bool:
-        if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if self.controller_client is not None and self.controller_backend != "des_only":
             return self._controller_allows_label(label, t_s)
         for start_s, end_s in self.label_windows.get(label, []):
             if float(start_s) - 1e-12 <= t_s < float(end_s) + 1e-12:
@@ -1049,7 +1047,7 @@ class STBDPhysicsDES(Entity):
         self.paced_tick_fidelity_sum = 0.0
         final_segment_active = (
             self._controller_final_segment_active()
-            if self.controller_client is not None and self.controller_backend == "sdn_ryu"
+            if self.controller_client is not None and self.controller_backend != "des_only"
             else (self.final_segment_start_s - 1e-12 <= now_s < self.final_segment_end_s - 1e-12)
         )
         if final_segment_active:

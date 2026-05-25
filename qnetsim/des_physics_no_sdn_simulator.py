@@ -7,8 +7,6 @@ import itertools
 import json
 import math
 import random
-import sys
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,109 +14,14 @@ from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 
-QCOMPUTE_ROOT = Path(__file__).resolve().parents[1]
-if str(QCOMPUTE_ROOT) not in sys.path and (QCOMPUTE_ROOT / "Extensions").is_dir():
-    sys.path.insert(0, str(QCOMPUTE_ROOT))
+from framework.core.des import DESEnv, Entity, EventHandler
 
-try:
-    from Extensions.QuantumNetwork.qcompute_qnet.core.des import DESEnv, Entity, EventHandler
-    HAVE_QNET_DES = True
-    QNET_DES_IMPORT_ERROR: Exception | None = None
-except Exception:
-    HAVE_QNET_DES = False
-    QNET_DES_IMPORT_ERROR = sys.exc_info()[1]
-
-    class EventHandler:
-        def __init__(self, owner, method: str, params=None, **kwargs):
-            self.owner = owner
-            self.method = method
-            self.params = [] if params is None else list(params)
-            self.kwargs = kwargs
-
-        def handle(self) -> None:
-            getattr(self.owner, self.method)(*self.params, **self.kwargs)
-
-    class _Scheduler:
-        def __init__(self, owner, env: "DESEnv"):
-            self.owner = owner
-            self.env = env
-
-        def schedule_at(self, time: int, handler: EventHandler, priority=None) -> None:
-            heapq.heappush(
-                self.env._queue,
-                (int(time), int(priority or 0), next(self.env._counter), handler),
-            )
-
-        def schedule_after(self, delay: int, handler: EventHandler, priority=None) -> None:
-            self.schedule_at(self.env.now + int(delay), handler, priority)
-
-        def schedule_now(self, handler: EventHandler, priority=None) -> None:
-            self.schedule_at(self.env.now, handler, priority)
-
-    class DESEnv:
-        __DEFAULT_ENV = None
-
-        def __init__(self, name: str = "des", default: bool = False):
-            self.name = name
-            self.entities: List[Entity] = []
-            self._queue: List[Tuple[int, int, int, EventHandler]] = []
-            self._counter = itertools.count()
-            self._now = 0
-            if default:
-                self.set_default_env()
-
-        @property
-        def now(self) -> int:
-            return self._now
-
-        def init(self) -> None:
-            for entity in list(self.entities):
-                entity.init()
-
-        def run(self, end_time=None, logging: bool = False, summary: bool = True) -> None:
-            limit = float("inf") if end_time is None else int(end_time)
-            while self._queue:
-                t_ps, _priority, _idx, handler = heapq.heappop(self._queue)
-                if t_ps > limit:
-                    break
-                self._now = t_ps
-                handler.handle()
-
-        def set_default_env(self) -> None:
-            DESEnv.__DEFAULT_ENV = self
-
-        @classmethod
-        def get_default_env(cls):
-            return cls.__DEFAULT_ENV
-
-    class Entity:
-        def __init__(self, name: str, env: Optional[DESEnv] = None):
-            self.name = name
-            if env is None:
-                env = DESEnv.get_default_env()
-                if env is None:
-                    raise ValueError("Default DES environment is None.")
-            self.env = env
-            self.env.entities.append(self)
-            self.owner = self
-            self.components = []
-            self.scheduler = _Scheduler(self, self.env)
-            self.agenda = []
-            self.signed_events = []
-
-        def init(self) -> None:
-            pass
+HAVE_QNET_DES = True
+QNET_DES_IMPORT_ERROR: Exception | None = None
 
 
 def require_qnet_des(context: str = "this workflow") -> None:
-    if HAVE_QNET_DES:
-        return
-    detail = f": {QNET_DES_IMPORT_ERROR}" if QNET_DES_IMPORT_ERROR is not None else ""
-    raise RuntimeError(
-        f"QNET DES is required for {context}, but "
-        "Extensions.QuantumNetwork.qcompute_qnet.core.des could not be imported"
-        f"{detail}."
-    )
+    return None
 
 from channels.fso import FSOAnalyticalChannelModel, FSOParams, werner_to_fidelity
 from mobility.geometry import GeometryEngine

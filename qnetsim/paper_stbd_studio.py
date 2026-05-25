@@ -315,7 +315,7 @@ def load_fast_sanity_preset() -> None:
     st.session_state.stbd_isl_fso_n_dc = 10.0
 
 
-def load_full_paper_preset() -> None:
+def load_full_search_preset() -> None:
     cfg = default_config()
     st.session_state.stbd_execution_mode = "basic"
     st.session_state.stbd_controller_backend = "des_only"
@@ -437,6 +437,11 @@ def load_paced_snapshot_preset() -> None:
     st.session_state.stbd_paced_delivery_dt_s = 30.0
 
 
+def load_paced_snapshot_local_preset() -> None:
+    load_paced_snapshot_preset()
+    st.session_state.stbd_controller_backend = "sdn_local"
+
+
 def load_paced_snapshot_ryu_preset() -> None:
     load_paced_snapshot_preset()
     st.session_state.stbd_controller_backend = "sdn_ryu"
@@ -453,8 +458,10 @@ def _stbd_mode_label(mode: str) -> str:
 
 def _stbd_backend_label(backend: str) -> str:
     normalized = str(backend).lower().strip()
+    if normalized == "sdn_local":
+        return "DES + SDN Local"
     if normalized == "sdn_ryu":
-        return "SDN + Ryu"
+        return "DES + SDN Ryu"
     return "DES only"
 
 
@@ -587,7 +594,7 @@ def render_main() -> None:
         st.header("Run Controls")
         st.caption(f"Scenario: {mode_label} | {backend_label}")
         st.markdown("**Presets**")
-        preset_fast_col, preset_seg_col, preset_paced_col, preset_ryu_col, preset_full_col = st.columns(5)
+        preset_fast_col, preset_seg_col, preset_paced_col, preset_local_col, preset_ryu_col, preset_full_col = st.columns(6)
         with preset_fast_col:
             if st.button("STBD basic / Fast sanity", use_container_width=True):
                 load_fast_sanity_preset()
@@ -600,15 +607,19 @@ def render_main() -> None:
             if st.button("STBD paced / 600-150-30", use_container_width=True):
                 load_paced_snapshot_preset()
                 st.rerun()
+        with preset_local_col:
+            if st.button("STBD paced + Local", use_container_width=True):
+                load_paced_snapshot_local_preset()
+                st.rerun()
         with preset_ryu_col:
             if st.button("STBD paced + Ryu", use_container_width=True):
                 load_paced_snapshot_ryu_preset()
                 st.rerun()
         with preset_full_col:
-            if st.button("STBD basic / Full paper", use_container_width=True):
-                load_full_paper_preset()
+            if st.button("STBD basic / Full search", use_container_width=True):
+                load_full_search_preset()
                 st.rerun()
-        st.caption("Use `STBD basic / Fast sanity` for the old baseline, `STBD segmented / 600-150` for 600 s horizon with 150 s snapshots, `STBD paced / 600-150-30` for the same segmented route logic with paced 30 s final deliveries, `STBD paced + Ryu` for the Ryu-backed SDN controller path on the paced backend, and `STBD basic / Full paper` for the heavier Luxembourg-Singapore search space.")
+        st.caption("Use `STBD basic / Fast sanity` for the old baseline, `STBD segmented / 600-150` for 600 s horizon with 150 s snapshots, `STBD paced / 600-150-30` for the same segmented route logic with paced 30 s final deliveries, `STBD paced + Local` for the in-process SDN controller path, `STBD paced + Ryu` for the Ryu-backed SDN controller path, and `STBD basic / Full search` for the heavier Luxembourg-Singapore search space.")
         st.selectbox(
             "Execution mode",
             options=["basic", "segmented", "paced"],
@@ -621,10 +632,10 @@ def render_main() -> None:
         )
         st.selectbox(
             "Controller backend",
-            options=["des_only", "sdn_ryu"],
-            format_func=lambda value: "DES only" if value == "des_only" else "SDN + Ryu",
+            options=["des_only", "sdn_local", "sdn_ryu"],
+            format_func=_stbd_backend_label,
             key="stbd_controller_backend",
-            help="DES only runs the STBD path entirely in-process. SDN + Ryu keeps the same STBD route planning but gates segment activation through a local Ryu controller.",
+            help="DES only runs the STBD path entirely in-process. DES + SDN Local keeps the same STBD route planning but gates segment activation through an in-process controller core. DES + SDN Ryu uses the same controller logic through a local Ryu app.",
         )
         st.text_input("Run name", key="stbd_run_name")
         st.text_input("Output root", key="stbd_output_root")
@@ -668,7 +679,7 @@ def render_main() -> None:
         )
         st.info(
             "If you want a quick check that the STBD workflow is alive, start with the `STBD basic / Fast sanity` preset in the sidebar. "
-            "The full paper search can take much longer."
+            "The full search can take much longer."
         )
     with col_b:
         st.markdown('<div class="qns-card-title">Time & DES Controls</div>', unsafe_allow_html=True)
@@ -823,8 +834,9 @@ def render_main() -> None:
         st.selectbox(
             "swap fidelity model",
             options=["paper", "legacy"],
+            format_func=lambda value: "Reference" if value == "paper" else "Legacy",
             key="stbd_bsm_swap_model",
-            help="Use the paper-style swapped-fidelity law or the historical compact proxy.",
+            help="Use the reference swapped-fidelity law or the historical compact proxy.",
         )
         st.number_input("v_hom", min_value=0.0, max_value=1.0, step=0.01, key="stbd_bsm_v_hom")
         st.number_input("eta_det", min_value=0.0, max_value=1.0, step=0.01, key="stbd_bsm_eta_det")

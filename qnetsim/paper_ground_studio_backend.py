@@ -41,6 +41,7 @@ from des_ground_repeater_simulator import (
     visibility_start_offset,
     write_outputs,
 )
+from sdn_controller.ground_repeater_controller_core import GroundRepeaterSdnControllerCore
 from mobility.geometry import GeometryEngine
 from mobility.propagator import GroundStation, SkyfieldPropagator
 
@@ -442,6 +443,58 @@ class GroundRyuControllerClient:
                 "req_id": int(req_id),
                 "success_count": int(success_count),
             },
+        )
+
+
+class GroundLocalControllerClient:
+    def __init__(self, *, max_modes_per_label: int, max_bsm_per_cycle: int) -> None:
+        self.core = GroundRepeaterSdnControllerCore(
+            max_modes_per_label=int(max_modes_per_label),
+            max_bsm_per_cycle=int(max_bsm_per_cycle),
+        )
+
+    def reset(self) -> None:
+        self.core.reset()
+
+    def submit_request(
+        self,
+        *,
+        req_id: int,
+        src: str,
+        dst: str,
+        f_min: float,
+        timeout_ps: int,
+        t_ps: int,
+        target_pairs: int = 0,
+    ) -> None:
+        self.core.submit_request(
+            req_id=int(req_id),
+            src=str(src),
+            dst=str(dst),
+            f_min=float(f_min),
+            timeout_ps=int(timeout_ps),
+            t_ps=int(t_ps),
+            target_pairs=int(target_pairs),
+        )
+
+    def poll(self, *, req_id: int, t_ps: int) -> list[dict[str, Any]]:
+        del req_id
+        return self.core.poll(node="R1", t_ps=int(t_ps))
+
+    def update_link_state(self, payload: dict[str, Any]) -> None:
+        self.core.update_link_state(payload)
+
+    def report_storage(self, *, req_id: int, label: str, accepted_count: int) -> None:
+        self.core.report_storage(
+            req_id=int(req_id),
+            label=str(label),
+            accepted_count=int(accepted_count),
+        )
+
+    def report_swap_result(self, *, req_id: int, success_count: int) -> None:
+        self.core.report_swap_result(
+            req_id=int(req_id),
+            success_count=int(success_count),
         )
 
 
@@ -884,15 +937,19 @@ def run_ground_scenario(
         controller_context = nullcontext(None)
 
     with controller_context as controller_url:
-        controller_client = (
-            GroundRyuControllerClient(
+        if controller_mode == "sdn_ryu" and controller_url:
+            controller_client = GroundRyuControllerClient(
                 controller_url,
                 max_modes_per_label=int(args.max_modes_per_label),
                 max_bsm_per_cycle=int(args.max_bsm_per_cycle),
             )
-            if controller_url
-            else None
-        )
+        elif controller_mode == "sdn_local":
+            controller_client = GroundLocalControllerClient(
+                max_modes_per_label=int(args.max_modes_per_label),
+                max_bsm_per_cycle=int(args.max_bsm_per_cycle),
+            )
+        else:
+            controller_client = None
         sim = execute_once(args)
         write_outputs(sim, out_dir)
 

@@ -21,6 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from channels.fso import FSOParams, werner_to_fidelity
+from framework.core.des import DESEnv, EventHandler
 from des_no_sdn_paper_figures import (
     BSMStudyConfig,
     CITY_PAIRS,
@@ -51,9 +52,7 @@ from des_no_sdn_paper_figures import (
     write_csv_rows,
 )
 from des_physics_no_sdn_simulator import (
-    DESEnv,
     DesPhysicsNoSdn,
-    EventHandler,
     PS_PER_S,
     TokenBatch,
     _sample_binomial,

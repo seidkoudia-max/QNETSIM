@@ -11,14 +11,14 @@ import urllib.error
 import urllib.request
 import json
 from argparse import Namespace
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Sequence
 
 from algorithms.stbd import plan_stbd_route
+from framework.core.des import DESEnv
 from des_stbd_physics_simulator import (
-    DESEnv,
     PS_PER_S,
     STBDPhysicsDES,
     build_bsm_model,
@@ -27,6 +27,7 @@ from des_stbd_physics_simulator import (
     build_route_edges,
     summarize_run,
 )
+from sdn_controller.stbd_segment_controller_core import STBDSegmentControllerCore
 
 from .scenario_builder import ScenarioBundle
 
@@ -222,6 +223,40 @@ class RyuSTBDControllerClient:
         return response if isinstance(response, dict) else {}
 
 
+class LocalSTBDControllerClient:
+    def __init__(self) -> None:
+        self.core = STBDSegmentControllerCore()
+
+    def reset(self) -> None:
+        self.core.reset()
+
+    def install_request(
+        self,
+        *,
+        req_id: int,
+        execution_mode: str,
+        final_label: str,
+        route_start_s: float,
+        route_end_s: float,
+        final_segment_start_s: float,
+        final_segment_end_s: float,
+        segments: List[dict],
+    ) -> None:
+        self.core.install_request(
+            req_id=int(req_id),
+            execution_mode=str(execution_mode),
+            final_label=str(final_label),
+            route_start_s=float(route_start_s),
+            route_end_s=float(route_end_s),
+            final_segment_start_s=float(final_segment_start_s),
+            final_segment_end_s=float(final_segment_end_s),
+            segments=list(segments),
+        )
+
+    def poll(self, *, req_id: int, t_s: float) -> Dict[str, Any]:
+        return self.core.poll(req_id=int(req_id), t_s=float(t_s))
+
+
 def _run_single_launch(
     bundle: ScenarioBundle,
     *,
@@ -313,6 +348,8 @@ def _run_single_launch(
         remaining_s,
         max(float(bundle.args.snapshot_s), route_end_s - float(launch_s) + float(bundle.args.snapshot_s)),
     )
+    requested_backend = str(getattr(bundle.args, "stbd_controller_backend", "des_only")).lower().strip()
+    active_backend = requested_backend if requested_backend in {"sdn_local", "sdn_ryu"} else "des_only"
     sim_args = _clone_args(
         bundle.args,
         duration_s=float(sim_duration_s),
@@ -321,17 +358,18 @@ def _run_single_launch(
         planner_horizon_s=float(bundle.args.planner_horizon_s),
         seed=int(seed),
         time_offset_s=float(launch_s),
-        stbd_controller_backend=(
-            "sdn_ryu"
-            if controller_url and str(getattr(bundle.args, "stbd_controller_backend", "des_only")).lower().strip() == "sdn_ryu"
-            else "des_only"
-        ),
+        stbd_controller_backend=active_backend,
     )
-    if controller_url:
+    if active_backend != "des_only":
         sim_args.direct_swap_on_full_visibility = False
 
     env = DESEnv(name=f"stbd_constellation_{int(launch_s)}", default=True)
-    controller_client = RyuSTBDControllerClient(controller_url) if controller_url else None
+    if active_backend == "sdn_ryu" and controller_url:
+        controller_client = RyuSTBDControllerClient(controller_url)
+    elif active_backend == "sdn_local":
+        controller_client = LocalSTBDControllerClient()
+    else:
+        controller_client = None
     sim = STBDPhysicsDES(
         name="stbd_constellation_des",
         env=env,
@@ -467,6 +505,15 @@ def run_constellation_des(
     series_bin_s: float,
 ) -> AdapterRunResult:
     backend = str(getattr(bundle.args, "stbd_controller_backend", "des_only")).lower().strip()
+    if backend == "sdn_local":
+        return _run_constellation_des_with_controller(
+            bundle,
+            launch_step_s=float(launch_step_s),
+            repeats=int(repeats),
+            seed=int(seed),
+            series_bin_s=float(series_bin_s),
+            controller_url=None,
+        )
     if backend == "sdn_ryu":
         root_dir = Path(__file__).resolve().parent.parent
         with _ryu_controller_context(root_dir, bundle.out_dir) as controller_url:

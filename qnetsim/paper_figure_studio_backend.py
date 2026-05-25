@@ -57,8 +57,8 @@ class StudioPlotSelection:
 
 BACKEND_OPTIONS = {
     "des_only": "DES only",
-    "sdn_inproc": "SDN without Ryu",
-    "sdn_ryu": "SDN with Ryu",
+    "sdn_inproc": "DES + SDN Local",
+    "sdn_ryu": "DES + SDN Ryu",
 }
 
 

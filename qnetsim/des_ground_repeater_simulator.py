@@ -20,10 +20,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from channels.fiber import FiberAnalyticalChannelModel, FiberParams
+from framework.core.des import DESEnv, Entity, EventHandler
 from des_physics_no_sdn_simulator import (
-    DESEnv,
-    Entity,
-    EventHandler,
     PS_PER_S,
     build_bsm_model,
     build_fso_model,
@@ -313,7 +311,7 @@ class DesGroundRepeater(Entity):
             self.event_log.append([int(self.env.now), kind, payload])
 
     def init(self) -> None:
-        if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if self.controller_client is not None and self.controller_backend != "des_only":
             self.controller_client.reset()
             self.controller_client.submit_request(
                 req_id=GROUND_SDN_REQ_ID,
@@ -330,7 +328,7 @@ class DesGroundRepeater(Entity):
         self.scheduler.schedule_after(int(float(self.args.metrics_dt_s) * PS_PER_S), EventHandler(self, "metrics_tick"))
 
     def _controller_actions(self) -> List[Dict[str, object]]:
-        if self.controller_client is None or self.controller_backend != "sdn_ryu":
+        if self.controller_client is None or self.controller_backend == "des_only":
             return []
         now_ps = int(self.env.now)
         if self._controller_cache_t_ps == now_ps and self._controller_cache is not None:
@@ -420,7 +418,7 @@ class DesGroundRepeater(Entity):
     def orbit_update(self) -> None:
         self.link_states["S-R1"] = self.compute_satellite_link()
         self.link_states["R1-G"] = self.compute_fiber_link()
-        if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if self.controller_client is not None and self.controller_backend != "des_only":
             self._controller_cache_t_ps = None
             self._controller_cache = None
             for label in ("S-R1", "R1-G"):
@@ -439,7 +437,7 @@ class DesGroundRepeater(Entity):
         attempts = max(1, int(round(max(0.0, float(self.args.source_rate_hz)) * dt_s)))
         allowed_labels = (
             self._controller_generation_labels()
-            if self.controller_client is not None and self.controller_backend == "sdn_ryu"
+            if self.controller_client is not None and self.controller_backend != "des_only"
             else {"S-R1", "R1-G"}
         )
         for label in ("S-R1", "R1-G"):
@@ -464,7 +462,7 @@ class DesGroundRepeater(Entity):
             self.failures_bin += (attempts - link_success) + (link_success - stored) + dropped
             if accepted > 0:
                 self.tokens[label].append(TokenBatch(label, accepted, int(self.env.now), link.werner_w, link.fidelity))
-                if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+                if self.controller_client is not None and self.controller_backend != "des_only":
                     self.controller_client.report_storage(
                         req_id=GROUND_SDN_REQ_ID,
                         label=label,
@@ -474,7 +472,7 @@ class DesGroundRepeater(Entity):
         self._schedule_next("generation_tick", float(self.args.gen_delay_s))
 
     def swap_tick(self) -> None:
-        if self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if self.controller_client is not None and self.controller_backend != "des_only":
             for action in self._controller_swap_actions():
                 count = min(
                     self.count_tokens(str(action.get("left_label", "S-R1"))),
@@ -528,7 +526,7 @@ class DesGroundRepeater(Entity):
         self.cumulative_successes += successes
         self.fidelity_sum_bin += successes * f_out
         self.success_wait_sum_bin += successes * 0.5 * (wait_left_s + wait_right_s)
-        if successes > 0 and self.controller_client is not None and self.controller_backend == "sdn_ryu":
+        if successes > 0 and self.controller_client is not None and self.controller_backend != "des_only":
             self.controller_client.report_swap_result(
                 req_id=GROUND_SDN_REQ_ID,
                 success_count=int(successes),

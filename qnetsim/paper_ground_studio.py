@@ -381,7 +381,13 @@ def render_viewer() -> None:
 
 
 def render_main() -> None:
-    backend_label = "SDN + Ryu" if str(st.session_state.get("ground_controller_backend", "des_only")) == "sdn_ryu" else "DES only"
+    backend = str(st.session_state.get("ground_controller_backend", "des_only")).lower().strip()
+    if backend == "sdn_local":
+        backend_label = "DES + SDN Local"
+    elif backend == "sdn_ryu":
+        backend_label = "DES + SDN Ryu"
+    else:
+        backend_label = "DES only"
     with st.sidebar:
         st.image(str(LOGO_PATH), width=200)
         st.caption("Scenario: Ground")
@@ -394,8 +400,12 @@ def render_main() -> None:
         st.number_input("Seed", min_value=0, step=1, key="ground_seed")
         st.selectbox(
             "Controller backend",
-            options=["des_only", "sdn_ryu"],
-            format_func=lambda value: "DES only" if value == "des_only" else "SDN + Ryu",
+            options=["des_only", "sdn_local", "sdn_ryu"],
+            format_func=lambda value: (
+                "DES only"
+                if value == "des_only"
+                else ("DES + SDN Local" if value == "sdn_local" else "DES + SDN Ryu")
+            ),
             key="ground_controller_backend",
         )
         generate = st.button("Generate Ground Results", use_container_width=True)
@@ -492,7 +502,12 @@ def render_main() -> None:
             st.number_input("Memory eta_mode0", min_value=0.0, max_value=1.0, step=0.01, key="ground_mem_eta_mode0")
             st.number_input("Memory eta_ti", min_value=0.0, max_value=1.0, step=0.01, key="ground_mem_eta_ti")
         st.divider()
-        st.selectbox("BSM swap model", options=["paper", "legacy"], key="ground_bsm_swap_model")
+        st.selectbox(
+            "BSM swap model",
+            options=["paper", "legacy"],
+            format_func=lambda value: "Reference" if value == "paper" else "Legacy",
+            key="ground_bsm_swap_model",
+        )
         c3, c4 = st.columns(2)
         with c3:
             st.number_input("BSM v_hom", min_value=0.0, max_value=1.0, step=0.01, key="ground_bsm_v_hom")
@@ -572,7 +587,7 @@ def render_main() -> None:
     st.markdown('<div class="qns-card-title">Optional Ground Sweep Studies</div>', unsafe_allow_html=True)
     st.markdown('<div class="qns-card-shell">', unsafe_allow_html=True)
     st.markdown(
-        "Tick only the extra studies you want. These stay Ground-only and add optional sweep figures plus paper-style composite overlays on top of the base time-series outputs."
+        "Tick only the extra studies you want. These stay Ground-only and add optional sweep figures plus composite overlays on top of the base time-series outputs."
     )
     sweep_col_a, sweep_col_b = st.columns([1.0, 1.0], gap="large")
     with sweep_col_a:

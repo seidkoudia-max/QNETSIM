@@ -223,7 +223,12 @@ def run_stbd_constellation_optimization(
     result = run_optimization(cfg, out_dir=cfg.results_root)
     mode = str(execution_mode).lower().strip()
     backend = str(controller_backend).lower().strip()
-    backend_suffix = " + Ryu" if backend == "sdn_ryu" else ""
+    if backend == "sdn_local":
+        backend_suffix = " + SDN Local"
+    elif backend == "sdn_ryu":
+        backend_suffix = " + SDN Ryu"
+    else:
+        backend_suffix = ""
     if mode == "segmented":
         variant = f"STBD segmented{backend_suffix}"
     elif mode == "paced":

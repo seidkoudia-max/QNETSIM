@@ -21,6 +21,7 @@
     "algorithms",
     "assets",
     "channels",
+    "framework",
     "mobility",
     "quantum",
     "stbd_constellation"
@@ -40,13 +41,13 @@
     "__init__.py",
     "seeding.py"
   ],
-  "vendored_qnet_core_files": [
+  "framework_core_files": [
     "__init__.py",
     "des.py",
     "log.py",
     "utils.py"
   ],
-  "vendored_qnet_protocol_files": [
+  "framework_protocol_files": [
     "__init__.py",
     "protocol.py",
     "resource.py",
