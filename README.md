@@ -1,4 +1,4 @@
-# QNETSIM Standalone Bundle
+# QNETSIM 
 
 This folder is a GitHub-ready standalone bundle of the active QNETSIM apps:
 
