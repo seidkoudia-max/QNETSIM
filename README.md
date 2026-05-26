@@ -113,21 +113,6 @@ runtime interfaces required by the three published GUIs:
 - `qnetsim/framework/core`
 - `qnetsim/framework/protocols`
 
-This lets the standalone repository run independently of external QNET/Baidu
-DES sources while keeping the current app behavior intact.
+This lets the standalone repository run independently of external sources while keeping the current app behavior intact.
 
-## Publish this bundle to GitHub
 
-This standalone bundle can be published as its own repository.
-
-```bash
-cd standalone_bundle
-git init -b main
-git add .
-git commit -m "Initial QNETSIM standalone bundle"
-git remote add origin https://github.com/<your-user>/<your-repo>.git
-git push -u origin main
-```
-
-If you prefer GitHub CLI, replace the remote-creation steps with your normal
-`gh repo create ...` workflow after authenticating with GitHub on your machine.
