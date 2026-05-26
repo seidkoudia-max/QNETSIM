@@ -34,23 +34,23 @@ so if you want the full simulator feature set, create the virtual environment
 with Python `3.9`.
 
 ## Quick start
-
 ```bash
-cd standalone_bundle
-/opt/homebrew/bin/python3.9 -m venv .venv
+cd /tmp
+git clone https://github.com/seidkoudia-max/QNETSIM.git
+cd /tmp/QNETSIM
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements-ryu.txt
+python -m pip install -r requirements.txt
 ```
+
 
 This is the recommended full setup and gives you:
 
 - `DES only`
 - `DES + SDN Local`
 - `DES + SDN Ryu`
-
-If `python3.9` lives somewhere else on your machine, use that executable
-instead of `/opt/homebrew/bin/python3.9`.
+.
 
 ### Minimal non-Ryu fallback
 
@@ -64,8 +64,9 @@ python -m pip install -r requirements.txt
 ### Launch the Single Repeater GUI
 
 ```bash
-cd qnetsim
+cd /tmp/QNETSIM/qnetsim
 python -m streamlit run paper_figure_studio.py --server.port 8501
+
 ```
 
 Open [http://localhost:8501](http://localhost:8501)
@@ -73,7 +74,7 @@ Open [http://localhost:8501](http://localhost:8501)
 ### Launch the STBD GUI
 
 ```bash
-cd qnetsim
+cd /tmp/QNETSIM/qnetsim
 python -m streamlit run paper_stbd_studio.py --server.port 8502
 ```
 
@@ -82,7 +83,7 @@ Open [http://localhost:8502](http://localhost:8502)
 ### Launch the Ground GUI
 
 ```bash
-cd qnetsim
+cd /tmp/QNETSIM/qnetsim
 python -m streamlit run paper_ground_studio.py --server.port 8503
 ```
 
