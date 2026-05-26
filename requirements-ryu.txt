@@ -1,3 +1,4 @@
 -r requirements.txt
+eventlet==0.30.2
 ryu>=4.34
 webob>=1.8
