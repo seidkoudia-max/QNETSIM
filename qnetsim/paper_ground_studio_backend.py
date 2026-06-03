@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 
 from channels.fiber import FiberParams
 from channels.fso import FSOParams
+from des_physics_no_sdn_simulator import build_memory_model
 from des_ground_repeater_simulator import (
     KIRCHBERG_END_DEFAULT,
     PS_PER_S,
@@ -44,6 +45,7 @@ from des_ground_repeater_simulator import (
 from sdn_controller.ground_repeater_controller_core import GroundRepeaterSdnControllerCore
 from mobility.geometry import GeometryEngine
 from mobility.propagator import GroundStation, SkyfieldPropagator
+from quantum.bsm import BSMParams, BellStateMeasurementModel
 
 
 GALLERY_MANIFEST = "gallery_manifest.json"
@@ -524,27 +526,88 @@ def _collect_series(sim) -> dict[str, list[float]]:
         "memory_total": [float(row.memory_sat + row.memory_fiber) for row in sim.metrics],
         "sat_visible": [float(row.sat_visible) for row in sim.metrics],
         "sat_elevation_deg": [float(row.sat_elevation_deg) for row in sim.metrics],
+        "sat_p_link": [float(row.sat_p_link) for row in sim.metrics],
     }
 
 
 def _plot_ground_sweep_family(*, out_dir: Path, filename: str, title: str, series_by_label: Dict[str, dict[str, list[float]]]) -> Path:
-    fig, axes = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharex=False)
     for label, series in series_by_label.items():
         axes[0].plot(series["t_s"], series["throughput_pairs_per_s"], label=label)
         axes[1].plot(series["t_s"], series["mean_fidelity_success"], label=label)
+    axes[0].set_title(f"{title} - rate")
+    axes[0].set_xlabel("Time (s)")
     axes[0].set_ylabel("pairs / s")
-    axes[0].set_title(title)
     axes[0].grid(True, alpha=0.3)
     axes[0].legend()
+    axes[1].set_title(f"{title} - fidelity")
     axes[1].set_xlabel("Time (s)")
     axes[1].set_ylabel("fidelity")
     axes[1].set_ylim(0.0, 1.0)
     axes[1].grid(True, alpha=0.3)
+    fig.suptitle(title)
     fig.tight_layout()
     out_path = out_dir / filename
     fig.savefig(out_path)
     plt.close(fig)
     return out_path
+
+
+def _max_peak_rate(series_by_label: Dict[str, dict[str, list[float]]]) -> float:
+    return max(
+        (max(series.get("throughput_pairs_per_s", [0.0]), default=0.0) for series in series_by_label.values()),
+        default=0.0,
+    )
+
+
+def _expected_ground_bsm_ceiling_pairs_per_s(args: argparse.Namespace) -> float:
+    bsm = BellStateMeasurementModel(
+        BSMParams(
+            v_hom=float(args.bsm_v_hom),
+            eta_det=float(args.bsm_eta_det),
+            sigma_det_s=float(args.bsm_sigma_det_s),
+            delta_t_s=float(args.bsm_delta_t_s),
+            p_dc=float(args.bsm_p_dc),
+            swap_model=str(args.bsm_swap_model),
+        )
+    )
+    return float(args.max_modes_per_label) * float(bsm.p_succ_bsm(1.0, 1.0))
+
+
+def _rytov_rate_is_memory_bsm_capped(
+    args: argparse.Namespace,
+    series_by_label: Dict[str, dict[str, list[float]]],
+) -> bool:
+    peaks = [
+        max(series.get("throughput_pairs_per_s", [0.0]), default=0.0)
+        for series in series_by_label.values()
+    ]
+    if not peaks:
+        return False
+    peak_max = max(peaks)
+    if peak_max <= 0.0:
+        return False
+    rel_span = (peak_max - min(peaks)) / max(1e-12, peak_max)
+    expected_ceiling = _expected_ground_bsm_ceiling_pairs_per_s(args)
+    return rel_span <= 0.05 and peak_max >= 0.7 * expected_ceiling
+
+
+def _estimate_link_sensitive_probe_source_rate_hz(
+    args: argparse.Namespace,
+    series_by_label: Dict[str, dict[str, list[float]]],
+) -> float:
+    peak_sat_p = max(
+        (max(series.get("sat_p_link", [0.0]), default=0.0) for series in series_by_label.values()),
+        default=0.0,
+    )
+    if peak_sat_p <= 0.0:
+        return float(args.source_rate_hz)
+    memory = build_memory_model(args)
+    write_prob = max(1e-9, float(memory.write_success_prob()))
+    return max(
+        1.0,
+        0.6 * float(args.max_modes_per_label) / max(1e-9, peak_sat_p * write_prob),
+    )
 
 
 def _first_visible_window_from_series(series: dict[str, list[float]]) -> tuple[float, float] | None:
@@ -1036,12 +1099,46 @@ def run_ground_scenario(
                     "cumulative_successes": float(sim_sigma.cumulative_successes),
                     "peak_rate_pairs_per_s": max(rytov_series[label]["throughput_pairs_per_s"], default=0.0),
                 }
+            memory_bsm_capped = _rytov_rate_is_memory_bsm_capped(args, rytov_series)
+            sweep_summary["rytov_sweep_diagnostic"] = {
+                "memory_bsm_capped": bool(memory_bsm_capped),
+                "expected_bsm_ceiling_pairs_per_s": float(_expected_ground_bsm_ceiling_pairs_per_s(args)),
+                "observed_peak_rate_pairs_per_s": float(_max_peak_rate(rytov_series)),
+            }
             artifacts["ground_rytov_sweep_png"] = _plot_ground_sweep_family(
                 out_dir=out_dir,
                 filename="ground_rytov_sweep.png",
-                title="Ground scenario Rytov sweep",
+                title=(
+                    "Ground scenario Rytov sweep"
+                    if not memory_bsm_capped
+                    else "Ground scenario Rytov sweep (memory/BSM-capped rate regime)"
+                ),
                 series_by_label=rytov_series,
             )
+            if memory_bsm_capped:
+                probe_source_rate_hz = min(
+                    float(args.source_rate_hz),
+                    _estimate_link_sensitive_probe_source_rate_hz(args, rytov_series),
+                )
+                if probe_source_rate_hz < 0.99 * float(args.source_rate_hz):
+                    probe_series = {}
+                    sweep_summary["rytov_sweep_diagnostic"]["probe_source_rate_hz"] = float(probe_source_rate_hz)
+                    for sigma_value in _iter_sweep_values(rytov_sweep_values):
+                        sweep_args = argparse.Namespace(**vars(args))
+                        sweep_args.duration_s = sweep_duration_s
+                        sweep_args.fso_sigma_r2 = sigma_value
+                        sweep_args.source_rate_hz = float(probe_source_rate_hz)
+                        sweep_args.no_plots = True
+                        sweep_args.no_event_log = True
+                        sim_probe = execute_once(sweep_args)
+                        label = f"sigma_R^2 = {sigma_value:g}"
+                        probe_series[label] = _collect_series(sim_probe)
+                    artifacts["ground_rytov_sweep_probe_png"] = _plot_ground_sweep_family(
+                        out_dir=out_dir,
+                        filename="ground_rytov_sweep_probe.png",
+                        title=f"Ground scenario Rytov sweep (link-sensitive probe, source = {probe_source_rate_hz:.0f} Hz)",
+                        series_by_label=probe_series,
+                    )
 
             if enable_t2_sweep and t2_sweep_values:
                 paper_rate_path, paper_fidelity_path = _plot_ground_paper_rate_fidelity(
