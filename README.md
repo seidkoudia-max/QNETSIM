@@ -7,8 +7,7 @@ This folder is a GitHub-ready standalone bundle of the active QNETSIM apps:
 - `QNETSIM Ground`
 
 It includes the repository physics, mobility, plotting, controller, and optimizer
-modules plus a QNETSIM-native DES/framework layer so the bundle runs without a
-separate checkout of the larger QCompute/QNET tree.
+modules plus a QNETSIM-native DES/framework layer.
 
 ## Folder layout
 
