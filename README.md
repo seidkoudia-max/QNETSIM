@@ -74,9 +74,7 @@ coincidence modelling, detector presets, polarization compensation and
 coincidence-window/source-rate studies. Parsed scenario parameters are
 included; the original reviewer workbook is not distributed.
 
-These studies produce assumption-based simulation results, not calibrated
-mission predictions. In particular, the historical S3 processing-limited
-plateau is not evidence of a universal memory-coherence threshold. See
+These studies produce assumption-based simulation results.  See
 [update notes](docs/UPDATES_20261001.md) for modelling qualifications.
 
 ## Outputs and Tests
