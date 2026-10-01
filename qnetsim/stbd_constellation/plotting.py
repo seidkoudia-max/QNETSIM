@@ -377,7 +377,7 @@ def plot_service_window_zoom(
         launches=launch_rows,
         raw_event_rows=raw_event_rows,
         total_duration_s=max((float(row.time_s) for row in rows), default=0.0)
-        + (_series_bin_s(rows) if rows else 0.0),
+        + (0.5 * _series_bin_s(rows) if rows else 0.0),
         bin_s=_series_bin_s(rows),
     )
     window = _active_window_bounds(envelope_rows)
@@ -417,8 +417,7 @@ def plot_service_window_zoom(
         throughput,
         color="#0b4fa8",
         linewidth=2.5,
-        marker="o",
-        markersize=3.6,
+        drawstyle="steps-mid",
         label="STBD avg pairs / event",
     )
     ax0.fill_between(
@@ -429,14 +428,6 @@ def plot_service_window_zoom(
         alpha=0.18,
         color="#93c5fd",
         step="mid",
-    )
-    ax0.step(
-        xs,
-        throughput,
-        where="mid",
-        color="#1d4ed8",
-        linewidth=1.6,
-        alpha=0.8,
     )
     ax0.set_ylabel("Average delivered pairs / event")
     if throughput_ylim is not None:
@@ -453,17 +444,8 @@ def plot_service_window_zoom(
         fidelity,
         color="#dc2626",
         linewidth=2.4,
-        marker="o",
-        markersize=3.4,
+        drawstyle="steps-mid",
         label="Delivered fidelity",
-    )
-    ax1.step(
-        xs,
-        fidelity,
-        where="mid",
-        color="#b91c1c",
-        linewidth=1.4,
-        alpha=0.85,
     )
     ax1.fill_between(
         xs,
@@ -944,7 +926,7 @@ def generate_result_artifacts(
         launches=launch_results,
         raw_event_rows=raw_event_rows,
         total_duration_s=max((float(row.time_s) for row in timeseries), default=0.0)
-        + (_series_bin_s(timeseries) if timeseries else 0.0),
+        + (0.5 * _series_bin_s(timeseries) if timeseries else 0.0),
         bin_s=_series_bin_s(timeseries),
     )
     write_timeseries_csv(envelope_csv, envelope_rows)

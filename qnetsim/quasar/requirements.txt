@@ -1,0 +1,7 @@
+# QUASAR GUI + DES only. No Ryu, SDN or Excel runtime is required.
+numpy>=1.24,<3
+scipy>=1.10,<2
+matplotlib>=3.7,<4
+skyfield>=1.49,<2
+pandas>=2,<3
+streamlit>=1.50,<2

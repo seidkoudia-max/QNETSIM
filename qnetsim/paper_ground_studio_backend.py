@@ -303,7 +303,14 @@ def _wait_for_local_port(port: int, *, timeout_s: float = 12.0) -> None:
 
 
 def _resolve_ryu_python(root_dir: Path) -> str:
+    override = os.environ.get("QNETSIM_RYU_PYTHON")
+    if override:
+        candidate = Path(override).expanduser()
+        if not candidate.is_file():
+            raise RuntimeError(f"QNETSIM_RYU_PYTHON does not exist: {candidate}")
+        return str(candidate)
     candidates = [
+        root_dir.parent / ".venv-ryu39" / "bin" / "python",
         root_dir.parent / ".venv39" / "bin" / "python",
         root_dir.parent / ".venv39" / "bin" / "python3",
         Path(sys.executable),

@@ -77,6 +77,8 @@ class Scheduler:
         self.env = env
 
     def schedule_at(self, time_ps: int, handler: EventHandler, priority: Optional[int] = None) -> Event:
+        if int(time_ps) < self.env.now:
+            raise ValueError("Cannot schedule an event before the current DES time.")
         event = Event(
             time=int(time_ps),
             handler=handler,
@@ -96,6 +98,8 @@ class Scheduler:
         return event
 
     def schedule_after(self, delay_ps: int, handler: EventHandler, priority: Optional[int] = None) -> Event:
+        if delay_ps < 0:
+            raise ValueError("Event delay must be nonnegative.")
         return self.schedule_at(self.env.now + int(delay_ps), handler, priority)
 
     def schedule_now(self, handler: EventHandler, priority: Optional[int] = None) -> Event:
@@ -213,4 +217,3 @@ class Protocol:  # pragma: no cover - runtime compatibility surface
     name: str
     env: DESEnv
     scheduler: Scheduler
-

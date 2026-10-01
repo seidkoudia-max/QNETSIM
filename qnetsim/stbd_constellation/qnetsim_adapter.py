@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Sequence
 
 from algorithms.stbd import plan_stbd_route
-from framework.core.des import DESEnv
 from des_stbd_physics_simulator import (
+    DESEnv,
     PS_PER_S,
     STBDPhysicsDES,
     build_bsm_model,
@@ -110,7 +110,14 @@ def _wait_for_local_port(port: int, *, timeout_s: float = 12.0) -> None:
 
 
 def _resolve_ryu_python(root_dir: Path) -> str:
+    override = os.environ.get("QNETSIM_RYU_PYTHON")
+    if override:
+        candidate = Path(override).expanduser()
+        if not candidate.is_file():
+            raise RuntimeError(f"QNETSIM_RYU_PYTHON does not exist: {candidate}")
+        return str(candidate)
     candidates = [
+        root_dir.parent / ".venv-ryu39" / "bin" / "python",
         root_dir.parent / ".venv39" / "bin" / "python",
         root_dir.parent / ".venv39" / "bin" / "python3",
         Path(sys.executable),
@@ -407,7 +414,7 @@ def _run_single_launch(
 
     total_event_count = sum(int(event.count) for event in sim.end_to_end_events)
     avg_latency_s = (
-        sum(float(event.t_s) * int(event.count) for event in sim.end_to_end_events)
+        sum((float(event.t_s) - float(launch_s)) * int(event.count) for event in sim.end_to_end_events)
         / total_event_count
         if total_event_count > 0
         else float("nan")
@@ -419,16 +426,7 @@ def _run_single_launch(
         float(swap_successes) / float(swap_attempts) if swap_attempts > 0 else float("nan")
     )
 
-    raw_rows = [
-        {
-            "launch_s": float(launch_s),
-            "abs_time_s": float(launch_s) + float(event.t_s),
-            "count": int(event.count),
-            "fidelity": float(event.fidelity),
-            "kind": str(event.kind),
-        }
-        for event in sim.end_to_end_events
-    ]
+    raw_rows = _delivery_event_rows(sim.end_to_end_events, launch_s=launch_s)
 
     result = LaunchResult(
         launch_s=float(launch_s),
@@ -456,25 +454,44 @@ def _run_single_launch(
     return result, raw_rows
 
 
+def _delivery_event_rows(events: Sequence[Any], *, launch_s: float) -> List[dict]:
+    # STBDPhysicsDES already records end-to-end events on the absolute clock.
+    return [
+        {
+            "launch_s": float(launch_s),
+            "abs_time_s": float(event.t_s),
+            "count": int(event.count),
+            "fidelity": float(event.fidelity),
+            "kind": str(event.kind),
+        }
+        for event in events
+    ]
+
+
 def _rasterize_event_service(
     *,
     launch_results: Sequence[LaunchResult],
     raw_event_rows: Sequence[dict],
     total_duration_s: float,
     bin_s: float,
+    repeats: int = 1,
 ) -> List[TimeSeriesRow]:
+    if bin_s <= 0 or repeats < 1:
+        raise ValueError("bin_s and repeats must be positive")
     launch_by_time = {float(row.launch_s): row for row in launch_results}
     rows: List[TimeSeriesRow] = []
     t = 0.0
     while t < total_duration_s - 1e-12:
-        t_mid = t + 0.5 * bin_s
+        end = min(t + bin_s, total_duration_s)
+        t_mid = 0.5 * (t + end)
         bin_events = [
             event
             for event in raw_event_rows
-            if float(t) - 1e-12 <= float(event["abs_time_s"]) < float(t + bin_s) + 1e-12
+            if t <= float(event["abs_time_s"]) < end
+            or (end == total_duration_s and float(event["abs_time_s"]) == end)
         ]
         total_count = sum(int(event.get("count", 0)) for event in bin_events)
-        throughput = float(total_count) / float(bin_s) if total_count > 0 else 0.0
+        throughput = float(total_count) / ((end - t) * repeats) if total_count > 0 else 0.0
         if total_count > 0:
             weights = [float(int(event.get("count", 0))) for event in bin_events]
             fidelity = _weighted_mean(
@@ -582,6 +599,9 @@ def _run_constellation_des_with_controller(
                 controller_url=controller_url,
             )
             trial_rows.append(result)
+            for event in events:
+                event["repeat"] = repeat
+                event["seed"] = launch_seed
             trial_events.extend(events)
 
         if len(trial_rows) == 1:
@@ -653,6 +673,7 @@ def _run_constellation_des_with_controller(
         raw_event_rows=raw_rows,
         total_duration_s=float(bundle.args.duration_s),
         bin_s=float(series_bin_s),
+        repeats=max(1, int(repeats)),
     )
     return AdapterRunResult(
         launch_results=launch_results,

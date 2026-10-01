@@ -21,8 +21,10 @@ import matplotlib.pyplot as plt
 
 from algorithms.stbd import STBDResult, plan_stbd_route
 from channels.fso import fidelity_to_werner, werner_to_fidelity
-from framework.core.des import DESEnv, Entity, EventHandler
 from des_physics_no_sdn_simulator import (
+    DESEnv,
+    Entity,
+    EventHandler,
     PS_PER_S,
     build_bsm_model,
     build_fso_model,
@@ -797,6 +799,7 @@ class STBDPhysicsDES(Entity):
 
         if (
             bool(getattr(self.args, "direct_swap_on_full_visibility", True))
+            and self.execution_mode != "paced"
             and self.plan
             and self._all_elementary_links_visible()
         ):

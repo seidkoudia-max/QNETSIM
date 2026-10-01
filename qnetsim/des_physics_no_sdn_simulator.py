@@ -7,6 +7,8 @@ import itertools
 import json
 import math
 import random
+import sys
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,10 +19,10 @@ import matplotlib.pyplot as plt
 from framework.core.des import DESEnv, Entity, EventHandler
 
 HAVE_QNET_DES = True
-QNET_DES_IMPORT_ERROR: Exception | None = None
+QNET_DES_IMPORT_ERROR = None
 
-
-def require_qnet_des(context: str = "this workflow") -> None:
+def require_qnet_des(context: str = 'this workflow') -> None:
+    # Compatibility name; the standalone executor is QNETSIM-native.
     return None
 
 from channels.fso import FSOAnalyticalChannelModel, FSOParams, werner_to_fidelity

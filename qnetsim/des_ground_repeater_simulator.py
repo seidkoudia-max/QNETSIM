@@ -20,8 +20,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from channels.fiber import FiberAnalyticalChannelModel, FiberParams
-from framework.core.des import DESEnv, Entity, EventHandler
+from channels.fso_temporal import TemporalFSOChannel, TemporalFSOParams
 from des_physics_no_sdn_simulator import (
+    DESEnv,
+    Entity,
+    EventHandler,
     PS_PER_S,
     build_bsm_model,
     build_fso_model,
@@ -33,6 +36,8 @@ from des_physics_no_sdn_simulator import (
 from mobility.geometry import ContactGeometry, ContactWindow, GeometryEngine
 from mobility.propagator import GroundStation, SkyfieldPropagator
 from mobility.tle_loader import SatelliteEphemeris
+from quantum.bell_diagonal import BellDiagonalState
+from quantum.optical_instruments import CoincidenceBSM, PhysicalBSMParams, ThresholdDetector
 
 WINDHOF_OGS_DEFAULT = {
     "name": "Windhof OGS",
@@ -148,6 +153,9 @@ class LinkState:
     werner_w: float
     fidelity: float
     loss_db: float
+    reference_loss_db: float = float("nan")
+    fading_factor: float = 1.
+    pointing_factor: float = 1.
 
 
 @dataclass
@@ -157,6 +165,7 @@ class TokenBatch:
     ready_ps: int
     werner_w: float
     fidelity: float
+    bell_state: Optional[BellDiagonalState] = None
 
 
 @dataclass
@@ -184,6 +193,20 @@ class MetricRow:
     fail_recall: int
     fail_bsm: int
     fail_storage_full: int
+    generation_attempts: int = 0
+    link_successes: int = 0
+    stored_tokens: int = 0
+    swap_attempts: int = 0
+    recalled_pairs: int = 0
+    heralded_pairs: int = 0
+    fail_write: int = 0
+    fail_readout: int = 0
+    fail_quality: int = 0
+    target_fidelity_above_half: int = 0
+    bell_phi_plus: float = float("nan")
+    bell_psi_plus: float = float("nan")
+    bell_phi_minus: float = float("nan")
+    bell_psi_minus: float = float("nan")
 
 
 def _single_station_score(window: ContactWindow, objective: str, memory_coherence_s: float) -> float:
@@ -289,6 +312,36 @@ class DesGroundRepeater(Entity):
         self.tokens: Dict[str, List[TokenBatch]] = {"S-R1": [], "R1-G": []}
         self.metrics: List[MetricRow] = []
         self.event_log: List[List[object]] = []
+        self.channel_mode = str(getattr(args, "ground_channel_mode", "mean"))
+        if self.channel_mode not in {"mean", "correlated"}:
+            raise ValueError("unknown Ground optical channel mode")
+        self.temporal_fso = (TemporalFSOChannel(fso, seed=int(args.seed), params=TemporalFSOParams(
+            fading_correlation_s=float(getattr(args, "fso_fading_correlation_s", 1.)),
+            pointing_correlation_s=float(getattr(args, "fso_pointing_correlation_s", 1.))))
+            if self.channel_mode == "correlated" else None)
+        self.refresh_channel_per_generation = self.temporal_fso is not None or bool(getattr(args, "refresh_fso_per_generation", False))
+        self.optical_trace: List[Dict[str, Any]] = []
+        self.memory_trace: List[Dict[str, Any]] = []
+        self.event_order = str(getattr(args, "ground_event_order", "legacy"))
+        if self.event_order not in {"legacy", "phased"}:
+            raise ValueError("unknown Ground event ordering")
+        self.swap_policy = str(getattr(args, "ground_swap_policy", "legacy_memory_rate"))
+        if self.swap_policy not in {"legacy_memory_rate", "per_cycle", "attempt_rate"}:
+            raise ValueError("unknown Ground swap processing policy")
+        self.bsm_attempt_rate_hz = getattr(args, "bsm_attempt_rate_hz", None)
+        if self.swap_policy == "attempt_rate":
+            if self.bsm_attempt_rate_hz is None or not math.isfinite(self.bsm_attempt_rate_hz) or self.bsm_attempt_rate_hz < 0:
+                raise ValueError("attempt_rate requires an explicit finite nonnegative bsm_attempt_rate_hz")
+        elif self.bsm_attempt_rate_hz is not None:
+            raise ValueError("bsm_attempt_rate_hz requires ground_swap_policy=attempt_rate")
+        if self.swap_policy != "legacy_memory_rate":
+            if not math.isfinite(args.swap_dt_s) or args.swap_dt_s <= 0 or args.max_bsm_per_cycle < 0:
+                raise ValueError("swap interval must be positive and cycle limit nonnegative")
+        self._last_budget_ps = int(env.now)
+        self._attempt_fraction = 0.
+        self.memory_quality_threshold = float(getattr(args, "memory_quality_threshold", .5))
+        if not 0 <= self.memory_quality_threshold <= 1:
+            raise ValueError("memory quality threshold must be between zero and one")
 
         self.successes_bin = 0
         self.failures_bin = 0
@@ -299,12 +352,62 @@ class DesGroundRepeater(Entity):
         self.fail_bsm_bin = 0
         self.fail_storage_full_bin = 0
         self.cumulative_successes = 0
+        self.state_model = str(getattr(args, "ground_state_model", "legacy"))
+        self.memory_noise = str(getattr(args, "ground_memory_noise", "phase"))
+        if self.state_model not in {"legacy", "bell_diagonal"}:
+            raise ValueError("unknown Ground state model")
+        if self.memory_noise not in {"phase", "isotropic"}:
+            raise ValueError("unknown Ground memory noise channel")
+        self.bell_bsm = None
+        if self.state_model == "bell_diagonal":
+            window = float(args.bsm_delta_t_s)
+            dark_probability = float(args.bsm_p_dc)
+            if window <= 0 or not 0 <= dark_probability < 1:
+                raise ValueError("Bell-vector mode requires a positive gate and 0 <= p_dc < 1")
+            # Map the configured per-gate dark probability to an effective channel
+            # rate. This is not a calibrated four-detector optical circuit.
+            self.bell_bsm = CoincidenceBSM(
+                PhysicalBSMParams(phase_visibility=bsm.effective_visibility(),
+                    coincidence_window_s=window, noise_channel="phase"),
+                ThresholdDetector(efficiency=float(args.bsm_eta_det),
+                    jitter_sigma_s=float(args.bsm_sigma_det_s),
+                    dark_rate_hz=-math.log1p(-dark_probability) / window,
+                    dead_time_s=0.))
+        self.bell_batches: List[Dict[str, Any]] = []
+        self._reset_diagnostics()
+
+    def _reset_diagnostics(self) -> None:
+        self.diagnostics = dict.fromkeys(("generation_attempts", "link_successes", "stored_tokens",
+            "swap_attempts", "recalled_pairs", "heralded_pairs", "fail_write", "fail_readout",
+            "fail_quality", "target_fidelity_above_half"), 0)
+        self.bell_sum = [0.] * 4
 
     def per_tick_memory_rate_cap(self) -> int:
-        # Interpret the memory mode count as the maximum end-to-end pair rate per second.
-        # When swap ticks run faster than 1 s, pace the release so the aggregate rate
-        # cannot exceed max_modes_per_label pairs / s.
+        """Historical numerical pacing only; memory slots are not a rate in Hz."""
         return max(1, int(math.floor(float(self.args.max_modes_per_label) * max(0.0, float(self.args.swap_dt_s)))))
+
+    def swap_attempt_budget(self) -> int:
+        """One shared operand-pair budget per tick, before recall and BSM trials.
+
+        per_cycle removes the implicit modes-to-Hz conversion for diagnostics;
+        its effective ceiling still depends on the tick duration. attempt_rate
+        uses a separately supplied service assumption, not detector timing or
+        memory capacity. Unused whole opportunities expire instead of banking.
+        """
+        cycle_limit = max(0, int(self.args.max_bsm_per_cycle))
+        if self.swap_policy == "legacy_memory_rate":
+            return min(cycle_limit, self.per_tick_memory_rate_cap())
+        if self.swap_policy == "per_cycle":
+            return cycle_limit
+        now = int(self.env.now)
+        if now < self._last_budget_ps:
+            raise ValueError("swap budget time cannot move backwards")
+        available = self._attempt_fraction + self.bsm_attempt_rate_hz * (now-self._last_budget_ps) / PS_PER_S
+        # Avoid losing an integer slot to binary roundoff at exact boundaries.
+        slots = int(math.floor(available + 1e-12))
+        self._attempt_fraction = max(0., available-slots)
+        self._last_budget_ps = now
+        return min(cycle_limit, slots)
 
     def log(self, kind: str, **payload: object) -> None:
         if not bool(self.args.no_event_log):
@@ -322,10 +425,18 @@ class DesGroundRepeater(Entity):
                 t_ps=0,
                 target_pairs=0,
             )
-        self.scheduler.schedule_now(EventHandler(self, "orbit_update"))
-        self.scheduler.schedule_after(int(float(self.args.gen_delay_s) * PS_PER_S), EventHandler(self, "generation_tick"))
-        self.scheduler.schedule_after(int(float(self.args.swap_dt_s) * PS_PER_S), EventHandler(self, "swap_tick"))
-        self.scheduler.schedule_after(int(float(self.args.metrics_dt_s) * PS_PER_S), EventHandler(self, "metrics_tick"))
+        self.scheduler.schedule_now(EventHandler(self, "orbit_update"), priority=self.event_priority("orbit_update"))
+        for handler, delay in (("generation_tick", self.args.gen_delay_s),
+                               ("swap_tick", self.args.swap_dt_s), ("metrics_tick", self.args.metrics_dt_s)):
+            self.scheduler.schedule_after(int(float(delay)*PS_PER_S), EventHandler(self, handler),
+                                          priority=self.event_priority(handler))
+
+    def event_priority(self, handler: str):
+        # Keep archived equal-priority ordering by default. New studies can
+        # make bin-end measurements independent of equal-time heap ordering.
+        if self.event_order == "legacy":
+            return None
+        return {"orbit_update": 0, "generation_tick": 1, "swap_tick": 2, "metrics_tick": 3}[handler]
 
     def _controller_actions(self) -> List[Dict[str, object]]:
         if self.controller_client is None or self.controller_backend == "des_only":
@@ -374,7 +485,17 @@ class DesGroundRepeater(Entity):
         visible = geom.elevation_deg >= float(self.args.min_elevation_deg)
         if bool(self.args.force_visible):
             visible = True
-        if visible:
+        sample = None
+        if self.temporal_fso is not None:
+            self.temporal_fso.advance(float(self.env.now) / PS_PER_S)
+        if visible and self.temporal_fso is not None:
+            sample = self.temporal_fso.sample(time_s=float(self.env.now) / PS_PER_S,
+                distance_m=geom.distance_m, elevation_deg=geom.elevation_deg)
+            p_link, w, fid = sample.efficiency, sample.werner_w, sample.fidelity
+            loss_db = -10*math.log10(p_link) if p_link > 0 else float("nan")
+            reference_loss = (-10*math.log10(sample.reference_efficiency)
+                              if sample.reference_efficiency > 0 else float("nan"))
+        elif visible:
             p_link, w, fid = self.fso.mean_link_metrics(
                 distance_m=geom.distance_m,
                 elevation_deg=geom.elevation_deg,
@@ -386,9 +507,11 @@ class DesGroundRepeater(Entity):
                 intersatellite=False,
                 apply_min_elevation=False,
             )
+            reference_loss = loss_db
         else:
             p_link, w, fid, loss_db = 0.0, 0.0, 0.25, 150.0
-        return LinkState(
+            reference_loss = float("nan")
+        link = LinkState(
             label="S-R1",
             t_ps=int(self.env.now),
             visible=visible,
@@ -398,7 +521,20 @@ class DesGroundRepeater(Entity):
             werner_w=w,
             fidelity=fid,
             loss_db=loss_db,
+            reference_loss_db=reference_loss,
+            fading_factor=sample.fading_factor if sample else 1.,
+            pointing_factor=sample.pointing_factor if sample else 1.,
         )
+        if bool(getattr(self.args, "record_optical_trace", False)):
+            self.optical_trace.append(dict(t_s=float(self.env.now)/PS_PER_S, visible=int(visible),
+                loss_db=loss_db if visible else float("nan"), reference_loss_db=reference_loss,
+                p_link=p_link, fidelity=fid if visible else float("nan"),
+                fading_factor=link.fading_factor, pointing_factor=link.pointing_factor,
+                pointing_x_rad=sample.pointing_x_rad if sample else 0.,
+                pointing_y_rad=sample.pointing_y_rad if sample else 0.,
+                fading_clipped=int(sample.fading_clipped) if sample else 0,
+                efficiency_clipped=int(sample.efficiency_clipped) if sample else 0))
+        return link
 
     def compute_fiber_link(self) -> LinkState:
         length_km = effective_fiber_length_km(self.args)
@@ -416,7 +552,8 @@ class DesGroundRepeater(Entity):
         )
 
     def orbit_update(self) -> None:
-        self.link_states["S-R1"] = self.compute_satellite_link()
+        if not self.refresh_channel_per_generation or "S-R1" not in self.link_states:
+            self.link_states["S-R1"] = self.compute_satellite_link()
         self.link_states["R1-G"] = self.compute_fiber_link()
         if self.controller_client is not None and self.controller_backend != "des_only":
             self._controller_cache_t_ps = None
@@ -433,6 +570,11 @@ class DesGroundRepeater(Entity):
         self._schedule_next("orbit_update", float(self.args.link_update_dt_s))
 
     def generation_tick(self) -> None:
+        if self.refresh_channel_per_generation:
+            # Update even for a full buffer: environmental randomness must not
+            # depend on whether this realization happens to request more pairs.
+            self.link_states["S-R1"] = self.compute_satellite_link()
+        self.record_memory_snapshot("pre_generation")
         dt_s = max(0.0, float(self.args.gen_delay_s))
         attempts = max(1, int(round(max(0.0, float(self.args.source_rate_hz)) * dt_s)))
         allowed_labels = (
@@ -456,12 +598,17 @@ class DesGroundRepeater(Entity):
             stored = _sample_binomial(self.rng, link_success, self.memory.write_success_prob())
             accepted = min(stored, capacity)
             dropped = max(0, stored - accepted)
+            self.diagnostics["generation_attempts"] += attempts
+            self.diagnostics["link_successes"] += link_success
+            self.diagnostics["stored_tokens"] += accepted
+            self.diagnostics["fail_write"] += link_success - stored
             self.fail_link_bin += attempts - link_success
             self.fail_recall_bin += link_success - stored
             self.fail_storage_full_bin += dropped
             self.failures_bin += (attempts - link_success) + (link_success - stored) + dropped
             if accepted > 0:
-                self.tokens[label].append(TokenBatch(label, accepted, int(self.env.now), link.werner_w, link.fidelity))
+                state = BellDiagonalState.werner(link.fidelity) if self.bell_bsm else None
+                self.tokens[label].append(TokenBatch(label, accepted, int(self.env.now), link.werner_w, link.fidelity, state))
                 if self.controller_client is not None and self.controller_backend != "des_only":
                     self.controller_client.report_storage(
                         req_id=GROUND_SDN_REQ_ID,
@@ -469,19 +616,24 @@ class DesGroundRepeater(Entity):
                         accepted_count=int(accepted),
                     )
             self.log("GEN_BATCH", label=label, attempts=attempts, link_success=link_success, stored=accepted, dropped=dropped)
+        self.record_memory_snapshot("post_generation")
         self._schedule_next("generation_tick", float(self.args.gen_delay_s))
 
     def swap_tick(self) -> None:
+        before = self.cumulative_successes
+        self.record_memory_snapshot("pre_swap")
+        remaining = self.swap_attempt_budget()
         if self.controller_client is not None and self.controller_backend != "des_only":
             for action in self._controller_swap_actions():
                 count = min(
                     self.count_tokens(str(action.get("left_label", "S-R1"))),
                     self.count_tokens(str(action.get("right_label", "R1-G"))),
                     int(action.get("count", 0)),
-                    self.per_tick_memory_rate_cap(),
+                    remaining,
                 )
                 if count <= 0:
                     continue
+                remaining -= count
                 sat_batches = self.pop_tokens(str(action.get("left_label", "S-R1")), count)
                 fiber_batches = self.pop_tokens(str(action.get("right_label", "R1-G")), count)
                 for n, left, right in self.pair_batches(sat_batches, fiber_batches):
@@ -490,38 +642,90 @@ class DesGroundRepeater(Entity):
             count = min(
                 self.count_tokens("S-R1"),
                 self.count_tokens("R1-G"),
-                int(self.args.max_bsm_per_cycle),
-                self.per_tick_memory_rate_cap(),
+                remaining,
             )
             if count > 0:
                 sat_batches = self.pop_tokens("S-R1", count)
                 fiber_batches = self.pop_tokens("R1-G", count)
                 for n, left, right in self.pair_batches(sat_batches, fiber_batches):
                     self.execute_swap_batch(n, left, right)
+        self.record_memory_snapshot("post_swap", delivered=self.cumulative_successes-before)
         self._schedule_next("swap_tick", float(self.args.swap_dt_s))
+
+    def state_after_storage(self, batch: TokenBatch, wait_s: float) -> BellDiagonalState:
+        state = batch.bell_state or BellDiagonalState.werner(batch.fidelity)
+        coherence = self.memory.coherence_factor(wait_s)
+        return state.dephase(coherence) if self.memory_noise == "phase" else state.depolarize(coherence)
+
+    def record_memory_snapshot(self, phase: str, delivered: int = 0) -> None:
+        if not bool(getattr(self.args, "record_memory_trace", False)):
+            return
+        row = dict(event_index=len(self.memory_trace), t_s=float(self.env.now)/PS_PER_S,
+                   phase=phase, delivered=delivered, cumulative_delivered=self.cumulative_successes)
+        for label, prefix in (("S-R1", "sat"), ("R1-G", "fiber")):
+            occupied, retrievable, qualified, retrievable_qualified = 0, 0., 0, 0.
+            for batch in self.tokens[label]:
+                age = (int(self.env.now)-batch.ready_ps)/PS_PER_S + float(self.args.memory_effective_wait_s)
+                probability = self.memory.conditional_recall_prob(age)
+                fidelity = (self.state_after_storage(batch, age).fidelity if self.bell_bsm else
+                            max(.25, batch.fidelity*self.memory.coherence_factor(age)))
+                good = fidelity > self.memory_quality_threshold
+                occupied += batch.count
+                retrievable += batch.count*probability
+                qualified += batch.count*int(good)
+                retrievable_qualified += batch.count*probability*int(good)
+            row.update({prefix+"_occupied": occupied, prefix+"_expected_retrievable": retrievable,
+                        prefix+"_above_threshold": qualified,
+                        prefix+"_expected_retrievable_above_threshold": retrievable_qualified})
+        self.memory_trace.append(row)
 
     def execute_swap_batch(self, n: int, left: TokenBatch, right: TokenBatch) -> None:
         wait_left_s = (int(self.env.now) - left.ready_ps) / PS_PER_S + float(self.args.memory_effective_wait_s)
         wait_right_s = (int(self.env.now) - right.ready_ps) / PS_PER_S + float(self.args.memory_effective_wait_s)
         recall = self.memory.conditional_recall_prob(wait_left_s) * self.memory.conditional_recall_prob(wait_right_s)
         recalled = _sample_binomial(self.rng, n, recall)
+        self.diagnostics["swap_attempts"] += n
+        self.diagnostics["recalled_pairs"] += recalled
+        self.diagnostics["fail_readout"] += n - recalled
         self.fail_recall_bin += n - recalled
         self.failures_bin += n - recalled
         if recalled <= 0:
             return
 
-        f_left = left.fidelity * self.memory.coherence_factor(wait_left_s)
-        f_right = right.fidelity * self.memory.coherence_factor(wait_right_s)
-        f_left = max(0.25, min(1.0, f_left))
-        f_right = max(0.25, min(1.0, f_right))
-        f_out = self.bsm.swapped_fidelity(f_left, f_right)
-        if f_out < float(self.args.f_min):
-            self.failures_bin += recalled
-            return
+        state_out = None
+        if self.bell_bsm is not None:
+            states = []
+            for batch, wait_s in ((left, wait_left_s), (right, wait_right_s)):
+                states.append(self.state_after_storage(batch, wait_s))
+            probability, state_out = self.bell_bsm.output(*states)
+            f_out = state_out.fidelity
+        else:
+            f_left = max(0.25, min(1.0, left.fidelity * self.memory.coherence_factor(wait_left_s)))
+            f_right = max(0.25, min(1.0, right.fidelity * self.memory.coherence_factor(wait_right_s)))
+            f_out = self.bsm.swapped_fidelity(f_left, f_right)
+            if f_out < float(self.args.f_min):
+                self.diagnostics["fail_quality"] += recalled
+                self.failures_bin += recalled
+                return
+            probability = self.bsm.p_succ_bsm(1.0, 1.0)
 
-        successes = _sample_binomial(self.rng, recalled, self.bsm.p_succ_bsm(1.0, 1.0))
-        self.fail_bsm_bin += recalled - successes
-        self.failures_bin += recalled - successes
+        heralded = _sample_binomial(self.rng, recalled, probability)
+        self.diagnostics["heralded_pairs"] += heralded
+        self.fail_bsm_bin += recalled - heralded
+        self.failures_bin += recalled - heralded
+        successes = heralded if f_out >= float(self.args.f_min) else 0
+        self.diagnostics["fail_quality"] += heralded - successes
+        if f_out > .5:
+            self.diagnostics["target_fidelity_above_half"] += successes
+        self.failures_bin += heralded - successes
+        if state_out is not None:
+            for i, value in enumerate(state_out.probabilities):
+                self.bell_sum[i] += successes * value
+            if bool(getattr(self.args, "record_bell_batches", False)):
+                self.bell_batches.append(dict(t_s=float(self.env.now) / PS_PER_S,
+                    attempts=n, recalled=recalled, heralded=heralded, delivered=successes,
+                    wait_sat_s=wait_left_s, wait_fiber_s=wait_right_s,
+                    **dict(zip(("phi_plus", "psi_plus", "phi_minus", "psi_minus"), state_out.probabilities))))
         self.successes_bin += successes
         self.cumulative_successes += successes
         self.fidelity_sum_bin += successes * f_out
@@ -537,7 +741,8 @@ class DesGroundRepeater(Entity):
         sat = self.link_states.get("S-R1")
         fiber = self.link_states.get("R1-G")
         successes = self.successes_bin
-        mean_fid = self.fidelity_sum_bin / successes if successes > 0 else 0.0
+        mean_fid = (self.fidelity_sum_bin / successes if successes > 0
+                    else (float("nan") if self.bell_bsm else 0.0))
         mean_wait_s = self.success_wait_sum_bin / successes if successes > 0 else 0.0
         self.metrics.append(
             MetricRow(
@@ -564,6 +769,10 @@ class DesGroundRepeater(Entity):
                 fail_recall=int(self.fail_recall_bin),
                 fail_bsm=int(self.fail_bsm_bin),
                 fail_storage_full=int(self.fail_storage_full_bin),
+                **self.diagnostics,
+                **dict(zip(("bell_phi_plus", "bell_psi_plus", "bell_phi_minus", "bell_psi_minus"),
+                    [p / successes for p in self.bell_sum] if successes and self.bell_bsm
+                    else [float("nan")] * 4)),
             )
         )
         self.successes_bin = 0
@@ -574,12 +783,13 @@ class DesGroundRepeater(Entity):
         self.fail_recall_bin = 0
         self.fail_bsm_bin = 0
         self.fail_storage_full_bin = 0
+        self._reset_diagnostics()
         self._schedule_next("metrics_tick", float(self.args.metrics_dt_s))
 
     def _schedule_next(self, handler: str, delay_s: float) -> None:
         next_t = int(self.env.now) + int(max(0.0, delay_s) * PS_PER_S)
         if next_t <= int(float(self.args.duration_s) * PS_PER_S):
-            self.scheduler.schedule_at(next_t, EventHandler(self, handler))
+            self.scheduler.schedule_at(next_t, EventHandler(self, handler), priority=self.event_priority(handler))
 
     def count_tokens(self, label: str) -> int:
         return sum(batch.count for batch in self.tokens[label])
@@ -591,7 +801,7 @@ class DesGroundRepeater(Entity):
         while remaining > 0 and batches:
             batch = batches[0]
             take = min(remaining, batch.count)
-            out.append(TokenBatch(batch.label, take, batch.ready_ps, batch.werner_w, batch.fidelity))
+            out.append(TokenBatch(batch.label, take, batch.ready_ps, batch.werner_w, batch.fidelity, batch.bell_state))
             batch.count -= take
             remaining -= take
             if batch.count <= 0:
@@ -719,11 +929,23 @@ def write_outputs(sim: DesGroundRepeater, out_dir: Path) -> None:
             encoding="utf-8",
         )
     fields = list(MetricRow.__dataclass_fields__.keys())
+    for filename, rows in (("ground_optical_trace.csv", sim.optical_trace),
+                           ("ground_memory_trace.csv", sim.memory_trace)):
+        if rows:
+            with (out_dir / filename).open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
     with (out_dir / "ground_repeater_metrics.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
         for row in sim.metrics:
             writer.writerow([getattr(row, field) for field in fields])
+    if sim.bell_batches:
+        with (out_dir / "ground_bell_batches.csv").open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(sim.bell_batches[0]))
+            writer.writeheader()
+            writer.writerows(sim.bell_batches)
     if not bool(sim.args.no_event_log):
         with (out_dir / "ground_repeater_event_log.csv").open("w", newline="") as handle:
             writer = csv.writer(handle)
@@ -744,7 +966,7 @@ def plot_outputs(sim: DesGroundRepeater, out_dir: Path) -> None:
     axes[0].set_title("Ground scenario link budget")
     axes[0].grid(True, alpha=0.3)
     axes[0].legend()
-    axes[1].plot(ts, [row.sat_loss_db for row in sim.metrics], label="Satellite-OGS loss", color="#dc2626")
+    axes[1].plot(ts, [row.sat_loss_db if row.sat_visible else float("nan") for row in sim.metrics], label="Satellite-OGS loss", color="#dc2626")
     axes[1].plot(ts, [row.fiber_loss_db for row in sim.metrics], label="Fiber loss", color="#7c3aed")
     axes[1].fill_between(ts, 0, 1, where=[row.sat_visible for row in sim.metrics], color="#bfdbfe", alpha=0.2, transform=axes[1].get_xaxis_transform(), label="satellite visible")
     axes[1].set_xlabel("Time (s)")
@@ -760,7 +982,7 @@ def plot_outputs(sim: DesGroundRepeater, out_dir: Path) -> None:
     axes[0].set_ylabel("pairs / s")
     axes[0].set_title("Ground scenario end-to-end performance")
     axes[0].grid(True, alpha=0.3)
-    axes[1].plot(ts, [row.mean_fidelity_success for row in sim.metrics], color="#dc2626")
+    axes[1].plot(ts, [row.mean_fidelity_success if row.successes else float("nan") for row in sim.metrics], color="#dc2626")
     axes[1].set_xlabel("Time (s)")
     axes[1].set_ylabel("fidelity")
     axes[1].set_ylim(0.0, 1.0)
@@ -798,6 +1020,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-rate-hz", type=float, default=1_000_000.0)
     parser.add_argument("--max-modes-per-label", type=int, default=256)
     parser.add_argument("--max-bsm-per-cycle", type=int, default=256)
+    parser.add_argument("--ground-swap-policy", choices=["legacy_memory_rate", "per_cycle", "attempt_rate"],
+                        default="legacy_memory_rate",
+                        help="Historical modes-to-Hz pacing (replay only), cycle-budget diagnostic, or independent attempts/s")
+    parser.add_argument("--bsm-attempt-rate-hz", type=float, default=None,
+                        help="Required for attempt_rate: explicit operand-pair service rate before readout/BSM, separate from memory slots")
     parser.add_argument("--f-min", type=float, default=0.25)
     parser.add_argument("--memory-effective-wait-s", type=float, default=0.0)
     parser.add_argument("--min-elevation-deg", type=float, default=10.0)
@@ -879,6 +1106,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bsm-delta-t-s", type=float, default=200e-12)
     parser.add_argument("--bsm-p-dc", type=float, default=1e-6)
     parser.add_argument("--bsm-swap-model", choices=["legacy", "paper"], default="paper")
+    parser.add_argument("--ground-state-model", choices=["legacy", "bell_diagonal"], default="legacy",
+                        help="Opt-in Bell vectors with a relative-window effective BSM; legacy preserves historical runs")
+    parser.add_argument("--ground-memory-noise", choices=["phase", "isotropic"], default="phase")
+    parser.add_argument("--record-bell-batches", action="store_true")
+    parser.add_argument("--ground-channel-mode", choices=["mean", "correlated"], default="mean")
+    parser.add_argument("--ground-event-order", choices=["legacy", "phased"], default="legacy",
+                        help="Phased orders equal-time events as link, generation, swap, metrics.")
+    parser.add_argument("--refresh-fso-per-generation", action="store_true",
+                        help="Fine-grid deterministic reference; correlated mode always refreshes at generation ticks")
+    parser.add_argument("--fso-fading-correlation-s", type=float, default=1.)
+    parser.add_argument("--fso-pointing-correlation-s", type=float, default=1.)
+    parser.add_argument("--record-optical-trace", action="store_true")
+    parser.add_argument("--record-memory-trace", action="store_true")
+    parser.add_argument("--memory-quality-threshold", type=float, default=.5)
     parser.add_argument("--ground-controller-backend", choices=["des_only", "sdn_ryu"], default="des_only")
     parser.add_argument("--no-event-log", action="store_true")
     parser.add_argument("--no-plots", action="store_true")

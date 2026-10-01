@@ -381,6 +381,13 @@ def render_viewer() -> None:
 
 
 def render_main() -> None:
+    profile = st.sidebar.selectbox("Execution profile", ["Historical Ground", "Physical timing S3 (DES only)"],
+                                   key="ground_execution_profile")
+    if profile == "Physical timing S3 (DES only)":
+        from ground_physical_studio import render
+        render()
+        return
+    st.sidebar.warning("Historical mode retains the modes-to-rate pacing rule. Its S3 plateau is not a physical memory-lifetime result.")
     backend = str(st.session_state.get("ground_controller_backend", "des_only")).lower().strip()
     if backend == "sdn_local":
         backend_label = "DES + SDN Local"

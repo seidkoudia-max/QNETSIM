@@ -1,0 +1,254 @@
+{
+  "source_name": "QUASAR simulation parameters.xlsx",
+  "sha256": "d9bfc10c3f4e8fdb78954324da29c7c33c4452894ebed1faada57edf947d2833",
+  "rows": [
+    {
+      "sheet": "Sheet1",
+      "cell": "C2",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Name",
+      "value": "Matera (IT)",
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C3",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Latitude",
+      "value": 40.649254,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C4",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Longitude",
+      "value": 16.704063,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C5",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Altitude (m)",
+      "value": 536.9,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C6",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Rx diameter (m)",
+      "value": 1.5,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C7",
+      "category": "Ground segment",
+      "parameter": "OGS1 - Obscuration ratio",
+      "value": 0.1,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C8",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Name",
+      "value": "Helmos (GR)",
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C9",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Latitude",
+      "value": 37.9854159375493,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C10",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Longitude",
+      "value": 22.19832088,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C11",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Altitude (m)",
+      "value": 2340,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C12",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Rx diameter (m)",
+      "value": 2.3,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C13",
+      "category": "Ground segment",
+      "parameter": "OGS2 - Obscuration ratio",
+      "value": 0.1035,
+      "notes": "74 cm diameter secondary mirror"
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C14",
+      "category": "Ground segment",
+      "parameter": "Minimum elevation (deg)",
+      "value": 20,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C17",
+      "category": "Space segment",
+      "parameter": "TX1 - diameter (m)",
+      "value": 0.25,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C18",
+      "category": "Space segment",
+      "parameter": "TX1 - pointing accuracy (\u00b5rad)",
+      "value": 1,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C19",
+      "category": "Space segment",
+      "parameter": "TX2 - diameter (m)",
+      "value": 0.25,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C20",
+      "category": "Space segment",
+      "parameter": "TX2 - pointing accuracy (\u00b5rad)",
+      "value": 1,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C21",
+      "category": "Space segment",
+      "parameter": "EPS pair rate (MHz)",
+      "value": 1000,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C22",
+      "category": "Space segment",
+      "parameter": "Source output fidelity",
+      "value": 0.99,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C23",
+      "category": "Space segment",
+      "parameter": "Source wavelength",
+      "value": "810 nm / 1550 nm",
+      "notes": "Check both"
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C26",
+      "category": "Orbit",
+      "parameter": "Semi-major axis (km)",
+      "value": 6939.12837495153,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C27",
+      "category": "Orbit",
+      "parameter": "RAAN (deg)",
+      "value": 284.5,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C28",
+      "category": "Orbit",
+      "parameter": "Altitude (km)",
+      "value": 566.89,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C29",
+      "category": "Orbit",
+      "parameter": "Eccentricity (deg)",
+      "value": 1.11349121023348e-15,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C30",
+      "category": "Orbit",
+      "parameter": "Inclination (deg)",
+      "value": 97.6354525357731,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C31",
+      "category": "Orbit",
+      "parameter": "Argument of periapsis (deg)",
+      "value": 0,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C32",
+      "category": "Orbit",
+      "parameter": "True anomaly (deg)",
+      "value": 54.0783008680408,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C33",
+      "category": "Orbit",
+      "parameter": "Epoch",
+      "value": "2032-01-01T22:59:28",
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C36",
+      "category": "Atmospheric parameters",
+      "parameter": "Cn^2 (m^(-2/3))",
+      "value": "1.7 e-14",
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C37",
+      "category": "Atmospheric parameters",
+      "parameter": "Wind speed (m/s)",
+      "value": 21,
+      "notes": null
+    },
+    {
+      "sheet": "Sheet1",
+      "cell": "C40",
+      "category": "Simulation parameters",
+      "parameter": "Time step / granularity (s)",
+      "value": 1,
+      "notes": null
+    }
+  ]
+}

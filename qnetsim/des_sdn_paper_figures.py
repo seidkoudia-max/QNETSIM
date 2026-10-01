@@ -21,7 +21,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from channels.fso import FSOParams, werner_to_fidelity
-from framework.core.des import DESEnv, EventHandler
 from des_no_sdn_paper_figures import (
     BSMStudyConfig,
     CITY_PAIRS,
@@ -52,7 +51,9 @@ from des_no_sdn_paper_figures import (
     write_csv_rows,
 )
 from des_physics_no_sdn_simulator import (
+    DESEnv,
     DesPhysicsNoSdn,
+    EventHandler,
     PS_PER_S,
     TokenBatch,
     _sample_binomial,
@@ -353,6 +354,13 @@ class DesPhysicsWithRepeaterSdn(DesPhysicsNoSdn):
         actions = self.controller.poll("R1", int(self.env.now))
         seen_labels: set[str] = set()
         for action in actions:
+            # poll() consumes swap credits in the controller, regardless of
+            # which local timer called it. Every returned swap must execute.
+            if str(action.get("msg_type", "")) == "InstructSwap":
+                self._execute_controller_swap(
+                    req_id=int(action["req_id"]), count=int(action["count"])
+                )
+                continue
             if str(action.get("msg_type", "")) != "StartSchedule":
                 continue
             label = str(action["label"])

@@ -22,8 +22,8 @@ from channels.fso import (
     FSOParams,
     efficiency_to_loss_db,
 )
-from framework.core.des import DESEnv
 from des_physics_no_sdn_simulator import (
+    DESEnv,
     PS_PER_S,
     DesPhysicsNoSdn,
     build_bsm_model,

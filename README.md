@@ -1,118 +1,108 @@
-# QNETSIM 
+# QNETSIM
 
-This folder is a GitHub-ready standalone bundle of the active QNETSIM apps:
+QNETSIM is a standalone simulator for satellite and hybrid quantum networks.
+It includes physical-layer models, mobility, routing, controller interfaces,
+plotting, and a QNETSIM-native discrete-event simulation (DES) framework.
+An external QCompute installation is not required.
 
-- `QNETSIM Single Repeater`
-- `QNETSIM STBD`
-- `QNETSIM Ground`
+## Applications
 
-It includes the repository physics, mobility, plotting, controller, and optimizer
-modules plus a QNETSIM-native DES/framework layer.
+| Application | Launcher | Local address |
+| --- | --- | --- |
+| S1: Single satellite repeater | `bash launch_single_repeater.sh` | http://localhost:8501 |
+| S2: STBD constellation | `bash launch_stbd.sh` | http://localhost:8502 |
+| S3: Ground repeater | `bash launch_ground.sh` | http://localhost:8503 |
+| QUASAR: Matera-Helmos downlinks | `bash launch_quasar.sh` | http://localhost:8504 |
+| S3: Physical-timing study | `bash launch_ground_physical.sh` | http://localhost:8505 |
 
-## Folder layout
+Run launchers from the repository root in an activated environment. Use a
+separate terminal for each application. Historical `paper_*` script filenames
+are retained for compatibility; they do not change the GUI product names.
 
-- `qnetsim/`
-  - Streamlit GUIs, simulators, physics, mobility, algorithms, controllers
-- `qnetsim/framework/`
-  - local DES core and protocol compatibility layer used by the simulator
-- `requirements.txt`
-  - Python dependencies for DES-only and DES + SDN Local
-- `requirements-ryu.txt`
-  - Optional add-on dependencies for DES + SDN Ryu
-- `launch_single_repeater.sh`
-- `launch_stbd.sh`
-- `launch_ground.sh`
+## Installation
 
-## Recommended Python version
+Clone into a persistent working directory, rather than a temporary folder:
 
-Use Python `3.9`. This is the recommended baseline for the standalone bundle
-because it supports all three controller modes, including `DES + SDN Ryu`.
-
-The optional `ryu` package does not currently build reliably on Python `3.12`,
-so if you want the full simulator feature set, create the virtual environment
-with Python `3.9`.
-
-## Quick start
 ```bash
-cd /tmp
 git clone https://github.com/seidkoudia-max/QNETSIM.git
-cd /tmp/QNETSIM
+cd QNETSIM
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+`requirements.txt` installs DES and local-controller dependencies. It does
+**not** install Ryu. S1, S2 and the legacy S3 execution profile offer
+`DES only`, `DES + SDN Local` and `DES + SDN Ryu`. The S3 physical-timing
+profile and QUASAR studies are DES-only workflows.
 
-This is the recommended full setup and gives you:
+### Optional Ryu Environment
 
-- `DES only`
-- `DES + SDN Local`
-- `DES + SDN Ryu`
-.
+The existing Ryu 4.34 integration uses a legacy Python 3.9 environment.
+Python 3.9 and the pinned Eventlet dependency are legacy components: use
+this environment for local research, not as an internet-facing service.
+Ryu installation on Python 3.12 is not supported by this setup.
 
-### Minimal non-Ryu fallback
-
-If you only want `DES only` and `DES + SDN Local`, you can still use a newer
-Python such as `3.12` and install:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-### Launch the Single Repeater GUI
+If you need Ryu, create a separate environment and launch the GUI from it:
 
 ```bash
-cd /tmp/QNETSIM/qnetsim
-python -m streamlit run paper_figure_studio.py --server.port 8501
-
+python3.9 -m venv .venv-ryu39
+source .venv-ryu39/bin/activate
+python -m pip install --upgrade pip
+python -m pip install 'setuptools<67' wheel
+python -m pip install --no-build-isolation -r requirements-ryu.txt
+bash launch_stbd.sh
 ```
 
-Open [http://localhost:8501](http://localhost:8501)
+The pinned Eventlet version supplies the compatibility interface required
+by Ryu. For STBD and Ground, `QNETSIM_RYU_PYTHON` may alternatively point
+to a separate Ryu environment's Python executable. Single Repeater uses
+the active GUI environment. A failed Ryu startup is reported explicitly;
+selecting Ryu does not silently fall back to a local controller.
 
-### Launch the STBD GUI
+## Updated Studies
+
+The Ground GUI offers a physical-timing execution profile for the
+Windhof-Kirchberg scenario. This separates optical loading, causal heralding,
+finite memories, BSM service and endpoint delivery. It reports raw rates,
+fidelity-qualified rates and Bell-vector conditional fidelity. A compact
+simulated pass fixture is included under `qnetsim/data/s3_windhof_kirchberg/`.
+
+The QUASAR GUI covers 810 nm and 1550 nm dual downlinks, background and
+coincidence modelling, detector presets, polarization compensation and
+coincidence-window/source-rate studies. Parsed scenario parameters are
+included; the original reviewer workbook is not distributed.
+
+These studies produce assumption-based simulation results, not calibrated
+mission predictions. In particular, the historical S3 processing-limited
+plateau is not evidence of a universal memory-coherence threshold. See
+[update notes](docs/UPDATES_20261001.md) for modelling qualifications.
+
+## Outputs and Tests
+
+Applications create run directories under `qnetsim/Output/` by default.
+Generated results, environments and local secrets are excluded from Git.
+
+From the repository root:
 
 ```bash
-cd /tmp/QNETSIM/qnetsim
-python -m streamlit run paper_stbd_studio.py --server.port 8502
+python -m unittest discover -s tests -p 'test_*.py'
+cd qnetsim
+python -m unittest discover -s quasar -p 'test_*.py'
+python -m unittest discover -s studies/manuscript_reproduction -p 'test_*.py'
+python -m unittest discover -s studies/quasar_matera_helmos -p 'test_*.py'
 ```
 
-Open [http://localhost:8502](http://localhost:8502)
+One optional workbook comparison is skipped unless its private input is
+provided locally. Runtime code and study tests use the bundled native
+framework in `qnetsim/framework/`.
 
-### Launch the Ground GUI
+## Maintaining the Standalone Export
 
-```bash
-cd /tmp/QNETSIM/qnetsim
-python -m streamlit run paper_ground_studio.py --server.port 8503
-```
-
-Open [http://localhost:8503](http://localhost:8503)
-
-The bundle includes the local Ryu controller apps used by:
-
-- `DES + SDN Ryu` in the Single Repeater GUI
-- `DES + SDN Ryu` in the STBD GUI
-- `DES + SDN Ryu` in the Ground GUI
-
-Those modes use the same Python environment after `ryu` is installed from
-`requirements-ryu.txt`.
-
-## Outputs
-
-Generated files are written under:
-
-- `qnetsim/Output/`
-
-The apps create run-specific subfolders automatically.
-
-## Notes on the standalone framework layer
-
-The simulator uses a QNETSIM-native DES/framework layer that preserves the
-runtime interfaces required by the three published GUIs:
-
-- `qnetsim/framework/core`
-- `qnetsim/framework/protocols`
-
-This lets the standalone repository run independently of external sources while keeping the current app behavior intact.
-
-
+`tools/sync_from_workspace.py` is an allowlisted, non-destructive exporter
+for maintainers with the development workspace. Run it on an update branch
+with `--source /path/to/development/qnetsim`. It preserves Git metadata and
+the native framework, records exported-file hashes in `bundle_manifest.json`,
+and excludes generated results and private source documents. Review and test
+the export before committing it.

@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "detector_technology_selection": {
+    "evidence_type": "user_selection",
+    "statement": "we consider Si-APD's for 810 and SNSPD's for 1550",
+    "manufacturer_preference": "SNSPD from Single Quantum datasheets; Si-APDs from Thorlabs datasheets",
+    "scope": "Technology and manufacturer preference only. Representative model/preset choices are simulator assumptions, not mission hardware selection or unit calibration. Identical receivers at both OGSs are assumed."
+  },
+  "source_rate_interpretation": {
+    "workbook_sha256": "d9bfc10c3f4e8fdb78954324da29c7c33c4452894ebed1faada57edf947d2833",
+    "cell": "C21",
+    "value_mhz": 1000.0,
+    "meaning": "emitted_pair_rate",
+    "evidence_type": "user_clarification",
+    "statement": "1000 MHz is the emitted-pair rate",
+    "scope": "Confirms the interpretation of the workbook rate, not source calibration, CW/pulsed operation, emission statistics or in-band brightness."
+  }
+}

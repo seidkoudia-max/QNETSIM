@@ -93,6 +93,24 @@ class FrameworkCoreTests(unittest.TestCase):
         self.assertEqual(len(protocol.agenda), 1)
         self.assertEqual(len(protocol.signed_events), 1)
 
+    def test_negative_delay_is_rejected(self) -> None:
+        env = DESEnv(name="negative-delay")
+        entity = RecorderEntity("entity", env, [])
+        with self.assertRaises(ValueError):
+            entity.scheduler.schedule_after(-1, EventHandler(entity, "mark", ["invalid"]))
+
+    def test_scheduling_into_past_is_rejected(self) -> None:
+        env = DESEnv(name="past-event")
+        sink: list[tuple[str, int]] = []
+        entity = RecorderEntity("entity", env, sink)
+        entity.scheduler.schedule_at(10, EventHandler(entity, "mark", ["first"]))
+        env.run()
+        with self.assertRaises(ValueError):
+            entity.scheduler.schedule_at(9, EventHandler(entity, "mark", ["invalid"]))
+        entity.scheduler.schedule_now(EventHandler(entity, "mark", ["current"]))
+        env.run()
+        self.assertEqual(sink, [("first", 10), ("current", 10)])
+
 
 if __name__ == "__main__":
     unittest.main()
