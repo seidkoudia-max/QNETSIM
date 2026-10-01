@@ -96,11 +96,3 @@ One optional workbook comparison is skipped unless its private input is
 provided locally. Runtime code and study tests use the bundled native
 framework in `qnetsim/framework/`.
 
-## Maintaining the Standalone Export
-
-`tools/sync_from_workspace.py` is an allowlisted, non-destructive exporter
-for maintainers with the development workspace. Run it on an update branch
-with `--source /path/to/development/qnetsim`. It preserves Git metadata and
-the native framework, records exported-file hashes in `bundle_manifest.json`,
-and excludes generated results and private source documents. Review and test
-the export before committing it.
