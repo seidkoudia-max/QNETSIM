@@ -9,11 +9,11 @@ An external QCompute installation is not required.
 
 | Application | Launcher | Local address |
 | --- | --- | --- |
-| S1: Single satellite repeater | `bash launch_single_repeater.sh` | http://localhost:8501 |
-| S2: STBD constellation | `bash launch_stbd.sh` | http://localhost:8502 |
-| S3: Ground repeater | `bash launch_ground.sh` | http://localhost:8503 |
-| QUASAR: Matera-Helmos downlinks | `bash launch_quasar.sh` | http://localhost:8504 |
-| S3: Physical-timing study | `bash launch_ground_physical.sh` | http://localhost:8505 |
+| S1: Single satellite repeater | `bash launch_single_repeater.sh` 
+| S2: STBD constellation | `bash launch_stbd.sh` 
+| S3: Ground repeater | `bash launch_ground.sh` 
+| QUASAR: Matera-Helmos downlinks | `bash launch_quasar.sh` 
+| S3: Physical-timing study | `bash launch_ground_physical.sh` 
 
 Run launchers from the repository root in an activated environment. Use a
 separate terminal for each application. Historical `paper_*` script filenames
