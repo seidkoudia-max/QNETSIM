@@ -7,7 +7,7 @@ An external QCompute installation is not required.
 
 ## Applications
 
-| Application | Launcher | Local address |
+| Application | Launcher 
 | --- | --- | --- |
 | S1: Single satellite repeater | `bash launch_single_repeater.sh` 
 | S2: STBD constellation | `bash launch_stbd.sh` 
