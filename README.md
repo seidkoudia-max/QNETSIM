@@ -72,15 +72,13 @@ simulated pass fixture is included under `qnetsim/data/s3_windhof_kirchberg/`.
 The QUASAR GUI covers 810 nm and 1550 nm dual downlinks, background and
 coincidence modelling, detector presets, polarization compensation and
 coincidence-window/source-rate studies. Parsed scenario parameters are
-included; the original reviewer workbook is not distributed.
+included.
 
-These studies produce assumption-based simulation results.  See
-[update notes](docs/UPDATES_20261001.md) for modelling qualifications.
 
 ## Outputs and Tests
 
 Applications create run directories under `qnetsim/Output/` by default.
-Generated results, environments and local secrets are excluded from Git.
+
 
 From the repository root:
 
@@ -92,7 +90,4 @@ python -m unittest discover -s studies/manuscript_reproduction -p 'test_*.py'
 python -m unittest discover -s studies/quasar_matera_helmos -p 'test_*.py'
 ```
 
-One optional workbook comparison is skipped unless its private input is
-provided locally. Runtime code and study tests use the bundled native
-framework in `qnetsim/framework/`.
 
