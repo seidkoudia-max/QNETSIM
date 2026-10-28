@@ -55,11 +55,7 @@ python -m pip install --no-build-isolation -r requirements-ryu.txt
 bash launch_stbd.sh
 ```
 
-The pinned Eventlet version supplies the compatibility interface required
-by Ryu. For STBD and Ground, `QNETSIM_RYU_PYTHON` may alternatively point
-to a separate Ryu environment's Python executable. Single Repeater uses
-the active GUI environment. A failed Ryu startup is reported explicitly;
-selecting Ryu does not silently fall back to a local controller.
+
 
 ## Updated Studies
 
